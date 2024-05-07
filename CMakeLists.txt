@@ -102,6 +102,7 @@ set(LINSYS linsys)
 set(DIRSRC ${LINSYS}/cpu/direct)
 set(INDIRSRC ${LINSYS}/cpu/indirect)
 set(EXTERNAL ${LINSYS}/external)
+set(CHOLMODSRC ${LINSYS}/cholmod)
 
 # Options
 # ----------------------------------------------
@@ -318,6 +319,56 @@ set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_INDIRECT})
 
 # ##############################################################################
 
+# cholmod method. Here we compile the cholmod method library.
+find_package(CHOLMOD REQUIRED)
+set(${PROJECT_NAME}_CHOLMOD ${PROJECT_NAME}cholmod)
+add_library(
+  ${${PROJECT_NAME}_CHOLMOD}
+  ${${PROJECT_NAME}_HDR} ${${PROJECT_NAME}_SRC} ${CHOLMODSRC}/private.c
+  ${CHOLMODSRC}/private.h ${${${PROJECT_NAME}_CHOLMOD}_HDR})
+
+target_include_directories(
+  ${${PROJECT_NAME}_CHOLMOD}
+  PRIVATE
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${CHOLMODSRC};${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+  SuiteSparse::CHOLMOD
+)
+
+target_include_directories(
+  ${${PROJECT_NAME}_CHOLMOD}
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/scs>")
+
+# Compiled with blas and lapack, can solve LPs, SOCPs, SDPs, ECPs, and PCPs
+target_compile_definitions(${${PROJECT_NAME}_CHOLMOD} PRIVATE ${COMPILER_OPTS}
+                                                               -DCHOLMOD)
+
+# The library depends on math (m) and (optionally) blas and lapack
+target_link_libraries(${${PROJECT_NAME}_CHOLMOD} PUBLIC m ${LAPACK_LINK_LIBRARIES} SuiteSparse::CHOLMOD)
+
+# Set some properties
+set_target_properties(
+  ${${PROJECT_NAME}_CHOLMOD}
+  PROPERTIES VERSION ${scs_VERSION} PUBLIC_HEADER
+                                    "${${PROJECT_NAME}_PUBLIC_HDR}")
+
+add_library(scs::${${PROJECT_NAME}_CHOLMOD} ALIAS ${${PROJECT_NAME}_CHOLMOD})
+
+# Install the library
+install(
+  TARGETS ${${PROJECT_NAME}_CHOLMOD}
+  EXPORT ${PROJECT_NAME}
+  COMPONENT runtime
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT shlib
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT lib
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT bin
+  PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/scs")
+
+# Add the CHOLMOD method to the set of the compiled targets
+set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_CHOLMOD})
+
+# ##############################################################################
+
 # If MKLROOT is defined, then we install the MKL version.
 if(DEFINED ENV{MKLROOT})
 
@@ -450,5 +501,19 @@ if(BUILD_TESTING)
       COMMAND run_tests_mkl
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
+
+  add_executable(run_tests_cholmod test/run_tests.c)
+  target_compile_definitions(run_tests_cholmod PRIVATE ${COMPILER_OPTS})
+  target_link_libraries(run_tests_cholmod PRIVATE scs::scscholmod)
+  target_include_directories(
+    run_tests_cholmod
+    PRIVATE
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test;${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+  )
+
+  add_test(
+    NAME run_tests_cholmod
+    COMMAND run_tests_cholmod
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 endif()
