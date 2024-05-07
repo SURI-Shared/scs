@@ -59,6 +59,7 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
     if(!success){
         return SCS_NULL;
     }
+    p->internal->supernodal=CHOLMOD_SIMPLICIAL;
     // p->internal->print=5;
     // cholmod_print_common("KKT Common:",p->internal);
     p->nprimals=A->n;
@@ -77,7 +78,10 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
     p->kkt=interpret_ScsMatrix_as_cholmod_sparse(kkt,use_upper_triangular_part,0);
     scs_free(kkt);//don't need the ScsMatrix struct anymore. The data in the pointers is now owned by p->kkt.
     p->L=cholmod_analyze(p->kkt,p->internal);
-    cholmod_factorize(p->kkt,p->L,p->internal);
+    success=cholmod_factorize(p->kkt,p->L,p->internal);
+    if(!success){
+        return SCS_NULL;
+    }
     // cholmod_print_common("KKT Common:",p->internal);
     return p;
 }
