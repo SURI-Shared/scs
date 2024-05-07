@@ -59,6 +59,8 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
     p->nduals=A->m;
     p->nrows=A->m+A->n;
     p->factorizations=0;
+    p->diag_p = (scs_float *)scs_calloc(A->n, sizeof(scs_float));
+    p->diag_r_idxs = (scs_int *)scs_calloc(p->nrows, sizeof(scs_int));
 
     scs_int use_upper_triangular_part=1;
     ScsMatrix *kkt = SCS(form_kkt)(A, P, p->diag_p, diag_r, p->diag_r_idxs, use_upper_triangular_part);
