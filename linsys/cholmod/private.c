@@ -54,7 +54,13 @@ void populate_cholmod_dense_with_column_vector(scs_float* vector,size_t nelement
 ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
                                      const scs_float *diag_r){
     ScsLinSysWork* p=(ScsLinSysWork *)scs_calloc(1, sizeof(ScsLinSysWork));
-    cholmod_start(p->internal);
+    p->internal=(cholmod_common*)scs_malloc(sizeof(cholmod_common));
+    int success=cholmod_start(p->internal);
+    if(!success){
+        return SCS_NULL;
+    }
+    // p->internal->print=5;
+    // cholmod_print_common("KKT Common:",p->internal);
     p->nprimals=A->n;
     p->nduals=A->m;
     p->nrows=A->m+A->n;
@@ -72,7 +78,7 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
     scs_free(kkt);//don't need the ScsMatrix struct anymore. The data in the pointers is now owned by p->kkt.
     p->L=cholmod_analyze(p->kkt,p->internal);
     cholmod_factorize(p->kkt,p->L,p->internal);
-
+    // cholmod_print_common("KKT Common:",p->internal);
     return p;
 }
 
@@ -114,9 +120,12 @@ void scs_free_lin_sys_work(ScsLinSysWork *p){
  */
 scs_int scs_solve_lin_sys(ScsLinSysWork *w, scs_float *b, const scs_float *s,
                           scs_float tol){
+    // cholmod_print_common("KKT Common:",w->internal);
     cholmod_dense B;
     populate_cholmod_dense_with_column_vector(b,w->nrows,&B);
+    // scs_printf("w nrows: %i \n",w->nrows);
     cholmod_dense* solution=cholmod_solve(CHOLMOD_A,w->L,&B,w->internal);//TODO: error checking
+    // scs_printf("w nrows: %i solution nrow: %i\n",w->nrows,solution->nrow);
     memcpy(b,solution->x,sizeof(scs_float)*w->nrows);
     int success=cholmod_free_dense(&solution,w->internal);
     if(success){
