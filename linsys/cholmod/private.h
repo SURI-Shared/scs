@@ -23,6 +23,9 @@ struct SCS_LIN_SYS_WORK {
     cholmod_common* internal;
     cholmod_sparse *kkt;//matrix to factorize
     cholmod_factor* L;//LDL^T factorization of kkt
+    cholmod_dense* solution;//storage for the solutions to the linear systems; automatically resized by solver
+    cholmod_dense* Y;//workspace for linear solver; automatically resized by solver
+    cholmod_dense* E;//workspace for linear solver; automatically resized by solver
 
     scs_int *diag_r_idxs;
     scs_float *diag_p;

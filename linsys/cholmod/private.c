@@ -68,6 +68,9 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
     p->factorizations=0;
     p->diag_p = (scs_float *)scs_calloc(A->n, sizeof(scs_float));
     p->diag_r_idxs = (scs_int *)scs_calloc(p->nrows, sizeof(scs_int));
+    p->solution=NULL;
+    p->Y=NULL;
+    p->E=NULL;
 
     scs_int use_upper_triangular_part=1;
     ScsMatrix *kkt = SCS(form_kkt)(A, P, p->diag_p, diag_r, p->diag_r_idxs, use_upper_triangular_part);
@@ -95,10 +98,20 @@ void scs_free_lin_sys_work(ScsLinSysWork *p){
     if(p){
         cholmod_free_sparse(&p->kkt,p->internal);
         cholmod_free_factor(&p->L,p->internal);
+        if(p->solution){
+            cholmod_free_dense(&p->solution,p->internal);
+        }
+        if(p->Y){
+            cholmod_free_dense(&p->Y,p->internal);
+        }
+        if(p->E){
+            cholmod_free_dense(&p->E,p->internal);
+        }
         cholmod_free_work(p->internal);
 
         scs_free(p->diag_p);
         scs_free(p->diag_r_idxs);
+
         scs_free(p);
     }
 }
@@ -124,19 +137,14 @@ void scs_free_lin_sys_work(ScsLinSysWork *p){
  */
 scs_int scs_solve_lin_sys(ScsLinSysWork *w, scs_float *b, const scs_float *s,
                           scs_float tol){
-    // cholmod_print_common("KKT Common:",w->internal);
     cholmod_dense B;
     populate_cholmod_dense_with_column_vector(b,w->nrows,&B);
-    // scs_printf("w nrows: %i \n",w->nrows);
-    cholmod_dense* solution=cholmod_solve(CHOLMOD_A,w->L,&B,w->internal);//TODO: error checking
-    // scs_printf("w nrows: %i solution nrow: %i\n",w->nrows,solution->nrow);
-    memcpy(b,solution->x,sizeof(scs_float)*w->nrows);
-    int success=cholmod_free_dense(&solution,w->internal);
-    if(success){
-        return 0;
-    }else{
-        return 1;//failed to free the solution matrix
+    int success=cholmod_solve2(CHOLMOD_A,w->L,&B,NULL,&w->solution,NULL,&w->Y,&w->E,w->internal);
+    if(!success){
+        return 1;//solve failed
     }
+    memcpy(b,w->solution->x,sizeof(scs_float)*w->nrows);
+    return 0;
 }
 /**
  *  Update the linsys workspace when `R` is changed. The sparsity pattern of the KKT matrix is unchanged, so we reuse the prior numerical factorization.
