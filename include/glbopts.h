@@ -39,6 +39,9 @@ extern "C" {
 #define WRITE_DATA_FILENAME (0)
 #define LOG_CSV_FILENAME (0)
 #define TIME_LIMIT_SECS (0.)
+#define NUM_PRECOMPUTED_SCALES (5)
+#define PRECOMPUTED_SCALES {1e-3,1e-2,1e-1,1,10}
+#define INITIAL_SCALE_IDX (1)
 /* Tolerance to check negativity condition for infeasibility */
 #define INFEAS_NEGATIVITY_TOL (1e-9)
 /* redefine printfs as needed */

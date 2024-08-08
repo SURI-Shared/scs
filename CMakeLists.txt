@@ -477,6 +477,20 @@ if(BUILD_TESTING)
     COMMAND run_tests_direct
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+  add_executable(run_tests_precomputed_direct test/run_tests.c)
+  target_compile_definitions(run_tests_precomputed_direct PRIVATE ${COMPILER_OPTS})
+  target_link_libraries(run_tests_precomputed_direct PRIVATE scs::scspdir)
+  target_include_directories(
+    run_tests_precomputed_direct
+    PRIVATE
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test;${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+  )
+  
+    add_test(
+      NAME run_tests_precomputed_direct
+      COMMAND run_tests_precomputed_direct
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
   add_executable(run_tests_indirect test/run_tests.c)
   target_compile_definitions(run_tests_indirect PRIVATE ${COMPILER_OPTS})
   target_link_libraries(run_tests_indirect PRIVATE scs::scsindir)
