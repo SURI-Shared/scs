@@ -807,14 +807,18 @@ scs_int scs_update(ScsWork *w, scs_float *b, scs_float *c) {
 
 /* Sets the diag_r vector, given the scale parameters in work */
 static void set_diag_r(ScsWork *w) {
+  scs_non_identity_scaling_rule(w->diag_r,w->d->n,w->d->m,w->stgs->rho_x,w->cone_work,w->stgs->scale);
+}
+
+void scs_non_identity_scaling_rule(scs_float* diag_r, scs_int n_eq, scs_int m_ineq, scs_float rho_x, const ScsConeWork* cone_work, scs_float scale){
   scs_int i;
-  for (i = 0; i < w->d->n; ++i) {
-    w->diag_r[i] = w->stgs->rho_x;
+  for (i = 0; i < n_eq; ++i) {
+    diag_r[i] =rho_x;
   }
   /* use cone information to set R_y */
-  SCS(set_r_y)(w->cone_work, w->stgs->scale, &(w->diag_r[w->d->n]));
+  SCS(set_r_y)(cone_work, scale, &(diag_r[n_eq]));
   /* if modified need to SCS(enforce_cone_boundaries)(...) */
-  w->diag_r[w->d->n + w->d->m] =
+  diag_r[n_eq + m_ineq] =
       TAU_FACTOR; /* TODO: is this the best choice? */
 }
 
@@ -843,6 +847,15 @@ static ScsWork *init_work(const ScsData *d, const ScsCone *k,
   w->stgs = (ScsSettings *)scs_calloc(1, sizeof(ScsSettings));
   SCS(deep_copy_stgs)(w->stgs, stgs);
   stgs = SCS_NULL; /* for safety */
+
+  #ifdef D_PRECOMPUTED_LINSOLVER
+  //override w->stgs->scale with the value specified by w->stgs->precomputed_scales and w->stgs->initial_scale_idx
+  if(w->stgs->initial_scale_idx>=w->stgs->num_precomputed_scales){
+    scs_printf("ERROR: Tried to set initial scale to precomputed scale at index %i but only %i provided.\n",w->stgs->initial_scale_idx,w->stgs->num_precomputed_scales);
+    return SCS_NULL;
+  }
+  w->stgs->scale=w->stgs->precomputed_scales[w->stgs->initial_scale_idx];  
+  #endif
 
   /* allocate workspace: */
   w->u = (scs_float *)scs_calloc(l, sizeof(scs_float));
@@ -889,8 +902,11 @@ static ScsWork *init_work(const ScsData *d, const ScsCone *k,
   }
   /* set w->*_orig and performs normalization if appropriate */
   scs_update(w, w->d->b, w->d->c);
-
+  #ifdef D_PRECOMPUTED_LINSOLVER
+  if (!(w->p = scs_init_precomputed_lin_sys_work(w->d->A, w->d->P, w->stgs->rho_x, w->cone_work, w->stgs->precomputed_scales, w->stgs->num_precomputed_scales, w->stgs->initial_scale_idx))) {
+  #else
   if (!(w->p = scs_init_lin_sys_work(w->d->A, w->d->P, w->diag_r))) {
+  #endif
     scs_printf("ERROR: init_lin_sys_work failure\n");
     return SCS_NULL;
   }
@@ -1029,6 +1045,84 @@ static void update_scale(ScsWork *w, const ScsCone *k, scs_int iter) {
   }
 }
 
+static void update_scale_precomputed(ScsWork *w, const ScsCone *k, scs_int iter) {
+  scs_int i;
+  scs_float factor, new_scale, relative_res_pri, relative_res_dual;
+  scs_float denom_pri, denom_dual;
+
+  ScsResiduals *r = w->r_orig;
+
+  scs_float nm_ax = SCALE_NORM(r->ax, w->d->m);
+  scs_float nm_s = SCALE_NORM(w->xys_orig->s, w->d->m);
+  scs_float nm_px_aty_ctau = SCALE_NORM(r->px_aty_ctau, w->d->n);
+  scs_float nm_px = SCALE_NORM(r->px, w->d->n);
+  scs_float nm_aty = SCALE_NORM(r->aty, w->d->n);
+  scs_float nm_ax_s_btau = SCALE_NORM(r->ax_s_btau, w->d->m);
+
+  scs_int iters_since_last_update = iter - w->last_scale_update_iter;
+  /* ||Ax + s - b * tau|| */
+  denom_pri = MAX(nm_ax, nm_s);
+  denom_pri = MAX(denom_pri, w->nm_b_orig * r->tau);
+  relative_res_pri = SAFEDIV_POS(nm_ax_s_btau, denom_pri);
+  /* ||Px + A'y + c * tau|| */
+  denom_dual = MAX(nm_px, nm_aty);
+  denom_dual = MAX(denom_dual, w->nm_c_orig * r->tau);
+  relative_res_dual = SAFEDIV_POS(nm_px_aty_ctau, denom_dual);
+
+  /* higher scale makes res_pri go down faster, so increase if res_pri larger */
+  w->sum_log_scale_factor += log(relative_res_pri) - log(relative_res_dual);
+  w->n_log_scale_factor++;
+
+  /* geometric mean */
+  factor =
+      SQRTF(exp(w->sum_log_scale_factor / (scs_float)(w->n_log_scale_factor)));
+
+  /* need at least RESCALING_MIN_ITERS since last update */
+  if (iters_since_last_update < RESCALING_MIN_ITERS) {
+    return;
+  }
+  new_scale =
+      MIN(MAX(w->stgs->scale * factor, MIN_SCALE_VALUE), MAX_SCALE_VALUE);
+  if (new_scale == w->stgs->scale) {
+    return;
+  }
+  if (should_update_r(factor, iters_since_last_update)) {
+    //find nearest precomputed scale
+    scs_float precomputed_scale;
+    scs_int closest_scale_idx = scs_get_closest_allowed_scale(new_scale, w->p, &precomputed_scale);
+    if(precomputed_scale==w->stgs->scale) {
+      return;
+    }
+
+    w->scale_updates++;
+    w->sum_log_scale_factor = 0;
+    w->n_log_scale_factor = 0;
+    w->last_scale_update_iter = iter;
+    w->stgs->scale = precomputed_scale;
+
+    /* update diag r vector */
+    set_diag_r(w);
+
+    /* update linear systems */
+    scs_precomputed_update_lin_sys_diag_r(w->p, w->diag_r,closest_scale_idx);
+
+    /* update pre-solved quantities */
+    update_work_cache(w);
+
+    /* reset acceleration so that old iterates aren't affecting new values */
+    if (w->accel) {
+      aa_reset(w->accel);
+    }
+    /* update v, using fact that rsk, u, u_t vectors should be the same */
+    /* solve: R^+ (v^+ + u - 2u_t) = rsk = R(v + u - 2u_t)
+     *  => v^+ = R+^-1 rsk + 2u_t - u
+     */
+    for (i = 0; i < w->d->n + w->d->m + 1; i++) {
+      w->v[i] = w->rsk[i] / w->diag_r[i] + 2 * w->u_t[i] - w->u[i];
+    }
+  }
+}
+
 /* scs is homogeneous so scale the iterate to keep norm reasonable */
 static inline void normalize_v(scs_float *v, scs_int len) {
   scs_float v_norm = SCS(norm_2)(v, len); /* always l2 norm */
@@ -1129,7 +1223,12 @@ scs_int scs_solve(ScsWork *w, ScsSolution *sol, ScsInfo *info,
 
     /* If residuals are fresh then maybe compute new scale. */
     if (w->stgs->adaptive_scale && i == w->r_orig->last_iter) {
+    #ifdef D_PRECOMPUTED_LINSOLVER
+      update_scale_precomputed(w, k, i);
+    #else
       update_scale(w, k, i);
+    #endif
+
     }
 
     /****************** dual variable step **********************/

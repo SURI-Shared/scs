@@ -100,6 +100,7 @@ include(AddUninstallTarget)
 # profile is not compiled.
 set(LINSYS linsys)
 set(DIRSRC ${LINSYS}/cpu/direct)
+set(PDIRSRC ${LINSYS}/cpu/precomputed)
 set(INDIRSRC ${LINSYS}/cpu/indirect)
 set(EXTERNAL ${LINSYS}/external)
 
@@ -267,6 +268,61 @@ install(
 
 # Add the direct method to the set of the compiled targets
 set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_DIRECT})
+
+# ##############################################################################
+# Precomputed Direct method. Here we compile the precomputed direct method library.
+set(${PROJECT_NAME}_PRECOMPUTED_DIRECT ${PROJECT_NAME}pdir)
+add_library(
+  ${${PROJECT_NAME}_PRECOMPUTED_DIRECT}
+  ${${PROJECT_NAME}_HDR}
+  ${${PROJECT_NAME}_SRC}
+  ${PDIRSRC}/private.c
+  ${PDIRSRC}/private.h
+  ${EXTERNAL}/qdldl/qdldl.c
+  ${${PROJECT_NAME}_AMD_EXTERNAL_SRC}
+  ${${PROJECT_NAME}_AMD_EXTERNAL_HDR}
+  ${${PROJECT_NAME}_LDL_EXTERNAL_HDR})
+
+target_include_directories(
+  ${${PROJECT_NAME}_PRECOMPUTED_DIRECT}
+  PRIVATE
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${EXTERNAL}/amd;${CMAKE_CURRENT_SOURCE_DIR}/${EXTERNAL}/qdldl;${CMAKE_CURRENT_SOURCE_DIR}/${PDIRSRC};${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+)
+
+target_include_directories(
+  ${${PROJECT_NAME}_PRECOMPUTED_DIRECT}
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/scs>")
+
+# Compiled with blas and lapack, can solve LPs, SOCPs, SDPs, ECPs, and PCPs
+target_compile_definitions(${${PROJECT_NAME}_PRECOMPUTED_DIRECT} PRIVATE ${COMPILER_OPTS})
+
+# This target is a precomputing solver, which changes how the main SCS loop interacts with the linear solver
+target_compile_definitions(${${PROJECT_NAME}_PRECOMPUTED_DIRECT} PUBLIC D_PRECOMPUTED_LINSOLVER)
+
+# The library depends on math (m) and (optionally) blas and lapack
+target_link_libraries(${${PROJECT_NAME}_PRECOMPUTED_DIRECT} PRIVATE m ${LAPACK_LINK_LIBRARIES})
+
+# Set some properties
+set_target_properties(
+  ${${PROJECT_NAME}_PRECOMPUTED_DIRECT}
+  PROPERTIES VERSION ${scs_VERSION} PUBLIC_HEADER
+                                    "${${PROJECT_NAME}_PUBLIC_HDR}")
+
+add_library(scs::${${PROJECT_NAME}_PRECOMPUTED_DIRECT} ALIAS ${${PROJECT_NAME}_PRECOMPUTED_DIRECT})
+
+# Install the library
+install(
+  TARGETS ${${PROJECT_NAME}_PRECOMPUTED_DIRECT}
+  EXPORT ${PROJECT_NAME}
+  COMPONENT runtime
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT shlib
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT lib
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT bin
+  PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/scs")
+
+# Add the direct method to the set of the compiled targets
+set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_PRECOMPUTED_DIRECT})
 
 # ##############################################################################
 

@@ -60,7 +60,7 @@ typedef struct {
 typedef struct {
   /** Whether to heuristically rescale the data before solve. */
   scs_int normalize;
-  /** Initial dual scaling factor (may be updated if adaptive_scale is on). */
+  /** Initial dual scaling factor (may be updated if adaptive_scale is on). Overridden by precomputed solvers.*/
   scs_float scale;
   /** Whether to adaptively update `scale`. */
   scs_int adaptive_scale;
@@ -90,6 +90,12 @@ typedef struct {
   const char *write_data_filename;
   /** String, if set will log data to this csv file (makes SCS very slow). */
   const char *log_csv_filename;
+  /** how many different scalings to precompute linear solve work for (ignored by non precomputed solvers) */
+  scs_int num_precomputed_scales;
+  /** the scalings to precompute linear solve work for (ignored by non precomputed solvers) */
+  scs_float* precomputed_scales;
+  /** the index in precomputed_scales to use as the initial dual scaling factor (for precomputed solvers, overrides this->scale. Ignored by non precomputed solvers in favor of this->scale) */
+  scs_int initial_scale_idx;
 } ScsSettings;
 
 /** Struct containing problem data. */
@@ -297,6 +303,18 @@ void scs_set_default_settings(ScsSettings *stgs);
  * @return       SCS version as a string.
  */
 const char *scs_version(void);
+
+/**
+ * Function to compute the non-identity Douglas Rachford Scaling
+ * 
+ * @param diag_r    will be populated with the diagonal elements of the scaling matrix
+ * @param n_var     number of variables in the problem
+ * @param m_con     number of constraints in the problem
+ * @param rho_x     constant scaling to use for primals (see ScsSettings.rho_x)
+ * @param cone_work contains the cones in the problem, as the cones can change the scaling matrix
+ * @param scale     scale quantity used to determine the scaling for duals (see ScsSettings.scale)
+ */
+void scs_non_identity_scaling_rule(scs_float* diag_r, scs_int n_var, scs_int m_con, scs_float rho_x, const ScsConeWork* cone_work, scs_float scale);
 
 #ifdef __cplusplus
 }
