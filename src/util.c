@@ -147,4 +147,11 @@ void scs_set_default_settings(ScsSettings *stgs) {
   stgs->write_data_filename = WRITE_DATA_FILENAME;
   stgs->log_csv_filename = LOG_CSV_FILENAME;
   stgs->time_limit_secs = TIME_LIMIT_SECS;
+  stgs->num_precomputed_scales = NUM_PRECOMPUTED_SCALES;
+  stgs->precomputed_scales = scs_calloc(NUM_PRECOMPUTED_SCALES,sizeof(scs_float));
+  const scs_float scales[] = PRECOMPUTED_SCALES;
+  for(int i=0;i<NUM_PRECOMPUTED_SCALES;i++){
+    stgs->precomputed_scales[i]=scales[i];
+  }
+  stgs->initial_scale_idx = INITIAL_SCALE_IDX;
 }
