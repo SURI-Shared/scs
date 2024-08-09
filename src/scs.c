@@ -1349,3 +1349,16 @@ scs_int scs(const ScsData *d, const ScsCone *k, const ScsSettings *stgs,
   scs_finish(w);
   return status;
 }
+
+#ifndef D_PRECOMPUTED_LINSOLVER
+//dummy implementations
+#ifndef __DUMMY_PRECOMPUTED_LINSOLVER_FUNCTIONS
+#define __DUMMY_PRECOMPUTED_LINSOLVER_FUNCTIONS
+ScsLinSysWork *scs_init_precomputed_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
+                                     const scs_float rho_x,const ScsConeWork* cone_work,scs_float* scales,scs_int num_precomputed_scales, scs_int initial_scale){
+    return (ScsLinSysWork*) NULL;
+}
+void scs_precomputed_update_lin_sys_diag_r(ScsLinSysWork *w, const scs_float *new_diag_r, const scs_int new_scales_index){}
+scs_int scs_get_closest_allowed_scale(scs_float requested_scale, const ScsLinSysWork* w, scs_float* new_scale){return 0;}
+#endif
+#endif
