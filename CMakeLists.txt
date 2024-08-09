@@ -465,7 +465,7 @@ install_basic_package_files(
 if(BUILD_TESTING)
   add_executable(run_tests_direct test/run_tests.c)
   target_compile_definitions(run_tests_direct PRIVATE ${COMPILER_OPTS})
-  target_link_libraries(run_tests_direct PRIVATE scs::scsdir)
+  target_link_libraries(run_tests_direct PRIVATE scs::scsdir m ${LAPACK_LINK_LIBRARIES})
   target_include_directories(
     run_tests_direct
     PRIVATE
@@ -479,7 +479,7 @@ if(BUILD_TESTING)
 
   add_executable(run_tests_precomputed_direct test/run_tests.c)
   target_compile_definitions(run_tests_precomputed_direct PRIVATE ${COMPILER_OPTS})
-  target_link_libraries(run_tests_precomputed_direct PRIVATE scs::scspdir)
+  target_link_libraries(run_tests_precomputed_direct PRIVATE scs::scspdir m ${LAPACK_LINK_LIBRARIES})
   target_include_directories(
     run_tests_precomputed_direct
     PRIVATE
@@ -493,7 +493,7 @@ if(BUILD_TESTING)
 
   add_executable(run_tests_indirect test/run_tests.c)
   target_compile_definitions(run_tests_indirect PRIVATE ${COMPILER_OPTS})
-  target_link_libraries(run_tests_indirect PRIVATE scs::scsindir)
+  target_link_libraries(run_tests_indirect PRIVATE scs::scsindir m ${LAPACK_LINK_LIBRARIES})
   target_include_directories(
     run_tests_indirect
     PRIVATE
