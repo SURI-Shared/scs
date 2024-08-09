@@ -285,6 +285,9 @@ ScsLinSysWork *scs_init_precomputed_lin_sys_work(const ScsMatrix *A, const ScsMa
   p->precomputed_scales = (scs_float *)scs_malloc(num_precomputed_scales*sizeof(scs_float));
   memcpy(p->precomputed_scales,scales,sizeof(scs_float)*num_precomputed_scales);
   p->num_precomputed_scales = num_precomputed_scales;
+  p->precomputed_Ls = scs_malloc(num_precomputed_scales*sizeof(ScsMatrix*));
+  p->precomputed_Ds = scs_malloc(num_precomputed_scales*sizeof(scs_float*));
+  p->precomputed_Dinvs = scs_malloc(num_precomputed_scales*sizeof(scs_float*));
 
   //initialize diag_r to the values it takes with the 0th scale
   scs_float* diag_r = (scs_float*)scs_malloc(sizeof(scs_float)*(n_plus_m+1));
