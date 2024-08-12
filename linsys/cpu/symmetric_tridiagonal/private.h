@@ -24,7 +24,7 @@ At each iteration, SCS wants to solve the linear system
 [(R_x + P)  A'; A -R_y] [x; y] = [z_x; z_y]
 
 Which can be rearranged as:
-(1): (R_x + P + A'A/r_y)x = z_x + z_y/r_y
+(1): (R_x + P + A'A/r_y)x = z_x + A'z_y/r_y
 (2): y = (Ax-z_y)/r_y
 
 R_x and R_y are diagonal, so if A'A is tridiagonal and P has no non-zero elements outside the tridiagonal (1) can be solved using the tridiagonal matrix algorithm
@@ -43,7 +43,9 @@ struct SCS_LIN_SYS_WORK {
   scs_float *ATAsubdiag; /*the n-1 elements of the subdiagonal of A'A*/
   scs_float *Pdiag; /*the n elements of the diagonal of P (NULL if no P)*/
   scs_float *Psubdiag; /*the n-1 elements of the subdiagonal of P (NULL if no P)*/
+  scs_float* scaled_zy_space; /*workspace to temporarily store the m elements of z_y/r_y*/
   const scs_float *diag_r; /*diagonal scaling matrix, does NOT own this memory*/
+  const ScsMatrix *A; /*constraint matrix mxn, does NOT own this memory*/
 };
 
 #ifndef SFLOAT

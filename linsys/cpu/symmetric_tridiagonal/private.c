@@ -14,6 +14,7 @@ void scs_free_lin_sys_work(ScsLinSysWork *p) {
       scs_free(p->Pdiag);
       scs_free(p->Psubdiag);
     }
+    scs_free(p->scaled_zy_space);
     scs_free(p);
   }
 }
@@ -117,6 +118,8 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
   }
   p->factorizations = 0;
   p->diag_r = diag_r;
+  p->A = A;
+  p->scaled_zy_space = (scs_float *)scs_calloc(A->m,sizeof(scs_float));
 
   //populate diagonal and subdiagonal of P
   if (P) {
@@ -142,12 +145,35 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
 
 scs_int scs_solve_lin_sys(ScsLinSysWork *p, scs_float *b, const scs_float *s,
                           scs_float tol) {
-  /* returns solution to linear system */
-  /* Ax = b with solution stored in b */
+  //b=[z_x, z_y]
+
+  //find x via (R_x + P + A'A/r_y)x = z_x + A'z_y/r_y
+
+  //put z_y/r_y into scaled_zy_space
+  for(scs_int i=0;i<p->m;i++){
+    p->scaled_zy_space[i]=b[i+p->n]/p->diag_r[i+p->n];
+  }
+  //construct z_x + A'z_y/r_y
+  SCS(accum_by_atrans)(p->A,p->scaled_zy_space,b);
+  //now b=[z_x + A'z_y/r_y, r_y]
 
   //solve for x
-  LAPACKE(pttrs)(LAPACK_COL_MAJOR,p->n,1,p->D,p->Lsubdiag,xrhs,p->n);
+  LAPACKE(pttrs)(LAPACK_COL_MAJOR,p->n,1,p->D,p->Lsubdiag,b,p->n);
+  //now b=[x,z_y]
 
-  //solve for y
+  //compute y = (Ax-z_y)/r_y
+  //first, negate z_y which is currently stored in b[n:]
+  for(scs_int i=p->n;i<p->n+p->m;i++){
+    b[i]=-b[i];
+  }//b=[x,-z_y]
+  //then add Ax to -z_y
+  SCS(accum_by_a)(p->A,b,b+p->n);
+  //now b=[x,r_y*y]
+
+  //so divide by r_y
+  for(scs_int i=p->n;i<p->n+p->m;i++){
+    b[i]/=p->diag_r[i];
+  }//b=[x,y] as desired
+
   return 0;
 }
