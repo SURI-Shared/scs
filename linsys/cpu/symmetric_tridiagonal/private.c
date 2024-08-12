@@ -99,6 +99,59 @@ static void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float
     }
 }
 
+static void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag){
+  //we assume that A'A is symmetric tridiagonal
+  
+  //compute diagonal elements as sum of squares of elements of columns of A
+  scs_int data_index=0;
+  for(scs_int i=0;i<A->n;i++){
+    scs_int nele=A->p[i+1]-A->p[i];
+    ATAdiag[i]=0;
+    for(scs_int j=0;j<nele;j++){
+      ATAdiag[i]+=A->x[data_index]*A->x[data_index];
+      data_index++;
+    }
+  }
+
+  //compute subdiagonal elements of A'A as dot(A[:,column+1],A[:,column])
+  //TODO: see if there are better ways to efficiently compute the subdiagonal of ATA
+  scs_int* ATnz=(scs_int*) scs_calloc(A->m,sizeof(scs_int));
+  scs_float* ATx=(scs_float*) scs_calloc(A->m,sizeof(scs_float));
+  data_index=A->p[1]-A->p[0];//index of the first non-zero in the 1th column of A
+  scs_int column_data_index=0;
+  for(scs_int column=0;column<A->n-1;column++){
+    scs_int ATrowindex=column+1;
+    ATAsubdiag[column]=0;
+    scs_int nele=A->p[ATrowindex+1]-A->p[ATrowindex];//num nonzero elements in the ATrowindex row of A'
+
+    //pull out the dense representation of row ATrowindex of A', which is the same as the ATrowindex column of A
+    for(scs_int j=0;j<nele;j++){
+      ATx[A->i[data_index]]=A->x[data_index];
+      ATnz[A->i[data_index]]=1;
+      data_index++;
+    }
+
+    //loop over the nonzeros in the column of A
+    scs_int ncolele=A->p[column+1]-A->p[column];
+    for(scs_int j=0;j<ncolele;j++){
+      scs_int row_index=A->i[column_data_index];
+      if(ATnz[row_index]!=0){
+        //the corresponding term in A' is also non-zero
+        ATAsubdiag[column]+=ATx[row_index]*A->x[column_data_index];
+      }
+      column_data_index++;
+    }
+
+    //zero out ATnz
+    for(scs_int j=0;j<A->m;j++){
+      ATnz[j]=0;
+    }
+  }
+
+  scs_free(ATnz);
+  scs_free(ATx);
+}
+
 ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
                                      const scs_float *diag_r) {
   ScsLinSysWork *p = (ScsLinSysWork *)scs_calloc(1, sizeof(ScsLinSysWork));
