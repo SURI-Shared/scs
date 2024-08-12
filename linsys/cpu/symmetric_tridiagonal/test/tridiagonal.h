@@ -86,7 +86,7 @@ static const char* ATA_not_diagonal(void){
     ok=verify_compute_symmetric_tridiagonal_ATA(A,diagonal,subdiagonal);
     if(!ok){
         scs_free(A);
-        return "INCORRECT_WHEN_A_IS_DIAGONAL";
+        return "INCORRECT_WHEN_A_IS_NOT_DIAGONAL";
     }else{
         scs_free(A);
     }
