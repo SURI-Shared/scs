@@ -12,10 +12,10 @@ static const char* A_to_tridiag(void){
 
     //generate random symmetric tridiagonal matrices
     for(scs_int i=0;i<trials;i++){
-        for(scs_int j=0;i<n;j++){
+        for(scs_int j=0;j<n;j++){
             expected_d[j]=rand_scs_float();
         }
-        for(scs_int j=0;i<n-1;j++){
+        for(scs_int j=0;j<n-1;j++){
             expected_subd[j]=rand_scs_float();
         }
         ok=verify_get_symmetric_diagonal_and_subdiagonal(expected_d,expected_subd,n);
@@ -41,7 +41,7 @@ static const char* ATA(void){
     scs_float* diag_squared=(scs_float*) scs_calloc(n,sizeof(scs_float));
     scs_float* zeros=(scs_float*) scs_calloc(n,sizeof(scs_float));
     for(scs_int i=0;i<trials;i++){
-        for(scs_int j=0;i<n;j++){
+        for(scs_int j=0;j<n;j++){
             diagonal[j]=rand_scs_float();
             diag_squared[j]=diagonal[j]*diagonal[j];
         }
