@@ -474,6 +474,20 @@ if(BUILD_TESTING)
     COMMAND run_tests_direct
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+  add_executable(unit_test_tridir ${TRIDIRSRC}/test/unit_test.c)
+    target_compile_definitions(unit_test_tridir PRIVATE ${COMPILER_OPTS})
+    target_link_libraries(unit_test_tridir PRIVATE m ${LAPACK_LINK_LIBRARIES} scs::scstridir)
+    target_include_directories(
+      unit_test_tridir
+      PRIVATE
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test;${CMAKE_CURRENT_SOURCE_DIR}/${TRIDIRSRC};${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+    )
+  
+    add_test(
+      NAME unit_test_tridir
+      COMMAND unit_test_tridir
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
   add_executable(run_tests_indirect test/run_tests.c)
   target_compile_definitions(run_tests_indirect PRIVATE ${COMPILER_OPTS})
   target_link_libraries(run_tests_indirect PRIVATE m ${LAPACK_LINK_LIBRARIES} scs::scsindir)
