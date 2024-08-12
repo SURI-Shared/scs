@@ -100,6 +100,7 @@ include(AddUninstallTarget)
 # profile is not compiled.
 set(LINSYS linsys)
 set(DIRSRC ${LINSYS}/cpu/direct)
+set(TRIDIRSRC ${LINSYS}/cpu/symmetric_tridiagonal)
 set(INDIRSRC ${LINSYS}/cpu/indirect)
 set(EXTERNAL ${LINSYS}/external)
 
@@ -268,6 +269,58 @@ install(
 # Add the direct method to the set of the compiled targets
 set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_DIRECT})
 
+# ##############################################################################
+# Tridiagonal Direct method. Here we compile the tridiagonal direct method library.
+if(USE_LAPACK)
+
+  set(${PROJECT_NAME}_TRIDIRECT ${PROJECT_NAME}tridir)
+  add_library(
+    ${${PROJECT_NAME}_TRIDIRECT}
+    ${${PROJECT_NAME}_HDR}
+    ${${PROJECT_NAME}_SRC}
+    ${TRIDIRSRC}/private.c
+    ${TRIDIRSRC}/private.h)
+
+  target_include_directories(
+    ${${PROJECT_NAME}_TRIDIRECT}
+    PRIVATE
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${TRIDIRSRC};${CMAKE_CURRENT_SOURCE_DIR}/${LINSYS}>"
+  )
+
+  target_include_directories(
+    ${${PROJECT_NAME}_TRIDIRECT}
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+          "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/scs>")
+
+  # Compiled with blas and lapack, can solve LPs, SOCPs, SDPs, ECPs, and PCPs
+  target_compile_definitions(${${PROJECT_NAME}_TRIDIRECT} PRIVATE ${COMPILER_OPTS})
+
+  # The library depends on math (m) and blas and lapack (LAPACK is not optional for the Tridigonal Direct solver)
+  target_link_libraries(${${PROJECT_NAME}_TRIDIRECT} PRIVATE m ${LAPACK_LINK_LIBRARIES})
+
+  # Set some properties
+  set_target_properties(
+    ${${PROJECT_NAME}_TRIDIRECT}
+    PROPERTIES VERSION ${scs_VERSION} PUBLIC_HEADER
+                                      "${${PROJECT_NAME}_PUBLIC_HDR}")
+
+  add_library(scs::${${PROJECT_NAME}_TRIDIRECT} ALIAS ${${PROJECT_NAME}_TRIDIRECT})
+
+  # Install the library
+  install(
+    TARGETS ${${PROJECT_NAME}_TRIDIRECT}
+    EXPORT ${PROJECT_NAME}
+    COMPONENT runtime
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT shlib
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT lib
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT bin
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/scs")
+
+  # Add the tridiagonal direct method to the set of the compiled targets
+  set_property(GLOBAL APPEND PROPERTY SCS_TARGETS ${${PROJECT_NAME}_TRIDIRECT})
+else()
+  message(STATUS "Not using LAPACK so skipping Symmetric Tridiagonal Direct solver")
+endif()
 # ##############################################################################
 
 # Indirect method. Here we compile the indirect method library.
