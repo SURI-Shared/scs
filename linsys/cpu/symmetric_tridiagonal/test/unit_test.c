@@ -21,7 +21,8 @@ int tests_run = 0;
 
 static const char *all_tests(void) {
   mu_run_test(A_to_tridiag);
-  mu_run_test(ATA);
+  mu_run_test(ATA_diagonal);
+  mu_run_test(ATA_not_diagonal);
   return 0;
 }
 int main(void) {
