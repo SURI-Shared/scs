@@ -68,7 +68,7 @@ ScsMatrix* sparse_from_symmetric_tridiagonal(const scs_float* diagonal, const sc
         sparse->p[i]=data_index;
         if(i>0){
             //add super diagonal
-            sparse->x[data_index]=subdiagonal[i];
+            sparse->x[data_index]=subdiagonal[i-1];
             sparse->i[data_index]=i-1;
             data_index++;
         }
@@ -79,7 +79,7 @@ ScsMatrix* sparse_from_symmetric_tridiagonal(const scs_float* diagonal, const sc
         if(i<n-1){
             //add sub diagonal
             sparse->x[data_index]=subdiagonal[i];
-            sparse->i[data_index]=i-1;
+            sparse->i[data_index]=i+1;
             data_index++;
         }
     }
