@@ -157,7 +157,7 @@ endif()
 
 if (USE_LAPACK)
   set(COMPILER_OPTS "-DUSE_LAPACK ${COMPILER_OPTS}")
-  list(APPEND LAPACK_LINK_LIBRARIES "blas" "lapack")
+  list(APPEND LAPACK_LINK_LIBRARIES "blas" "lapack" "lapacke")
 endif()
 
 if(USE_OPENMP)
