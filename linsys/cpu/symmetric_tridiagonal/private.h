@@ -54,6 +54,12 @@ struct SCS_LIN_SYS_WORK {
 #define LAPACKE(x) LAPACKE_s##x
 #endif
 
+//expose internal functions for testing purposes
+scs_int ldl_factor(ScsLinSysWork *p);
+void form_symmetric_tridiagonal(ScsLinSysWork* p);
+void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float* diagonal, scs_float* subdiagonal);
+void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag);
+
 #ifdef __cplusplus
 }
 #endif

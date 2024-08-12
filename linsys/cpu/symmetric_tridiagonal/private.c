@@ -20,7 +20,7 @@ void scs_free_lin_sys_work(ScsLinSysWork *p) {
 }
 
 /* can call only once between calls to form_symmetric_tridiagonal*/
-static scs_int ldl_factor(ScsLinSysWork *p) {
+scs_int ldl_factor(ScsLinSysWork *p) {
 #if VERBOSITY > 0
   scs_printf("numeric factorization\n");
 #endif
@@ -80,7 +80,7 @@ void scs_update_lin_sys_diag_r(ScsLinSysWork *p, const scs_float *diag_r) {
   }
 }
 //assumes diagonal and subdiagonal are already allocated and initialized to 0s
-static void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float* diagonal, scs_float* subdiagonal){
+void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float* diagonal, scs_float* subdiagonal){
   for (scs_int j = 0; j < M->n; j++) { /* cols */
       for (scs_int h = M->p[j]; h < M->p[j + 1]; h++) {
         scs_int i = M->i[h]; /* row */
@@ -99,7 +99,7 @@ static void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float
     }
 }
 
-static void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag){
+void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag){
   //we assume that A'A is symmetric tridiagonal
   
   //compute diagonal elements as sum of squares of elements of columns of A
