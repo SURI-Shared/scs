@@ -115,7 +115,7 @@ void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, sc
 
   //compute subdiagonal elements of A'A as dot(A[:,column+1],A[:,column])
   //TODO: see if there are better ways to efficiently compute the subdiagonal of ATA
-  scs_int* ATnz=(scs_int*) scs_calloc(A->m,sizeof(scs_int));
+  char* ATnz=(char*) scs_calloc(A->m,sizeof(char));
   scs_float* ATx=(scs_float*) scs_calloc(A->m,sizeof(scs_float));
   data_index=A->p[1]-A->p[0];//index of the first non-zero in the 1th column of A
   scs_int column_data_index=0;
