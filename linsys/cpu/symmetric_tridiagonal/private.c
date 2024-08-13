@@ -1,4 +1,5 @@
 #include "private.h"
+#include "util.h"
 
 const char *scs_get_lin_sys_method() {
   return "symmetric-tridiagonal";
@@ -101,7 +102,8 @@ void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float* diago
 
 void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag){
   //we assume that A'A is symmetric tridiagonal
-  
+  SCS(timer) init_timer;
+  SCS(tic)(&init_timer);
   //compute diagonal elements as sum of squares of elements of columns of A
   scs_int data_index=0;
   for(scs_int i=0;i<A->n;i++){
@@ -112,14 +114,22 @@ void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, sc
       data_index++;
     }
   }
-
+  scs_float diagonal_time=SCS(tocq)(&init_timer);
   //compute subdiagonal elements of A'A as dot(A[:,column+1],A[:,column])
   //TODO: see if there are better ways to efficiently compute the subdiagonal of ATA
+  SCS(tic)(&init_timer);
   char* ATnz=(char*) scs_calloc(A->m,sizeof(char));
   scs_float* ATx=(scs_float*) scs_calloc(A->m,sizeof(scs_float));
   data_index=A->p[1]-A->p[0];//index of the first non-zero in the 1th column of A
   scs_int column_data_index=0;
+
+  scs_float get_ATx_time=0;
+  scs_float accumulate_subdiag_time=0;
+  scs_float zero_ATnz_time=0;
+  scs_float allocation_time=SCS(tocq)(&init_timer);
+
   for(scs_int column=0;column<A->n-1;column++){
+    SCS(tic)(&init_timer);
     scs_int ATrowindex=column+1;
     ATAsubdiag[column]=0;
     scs_int nele=A->p[ATrowindex+1]-A->p[ATrowindex];//num nonzero elements in the ATrowindex row of A'
@@ -130,8 +140,9 @@ void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, sc
       ATnz[A->i[data_index]]=1;
       data_index++;
     }
-
+    get_ATx_time+=SCS(tocq)(&init_timer);
     //loop over the nonzeros in the column of A
+    SCS(tic)(&init_timer);
     scs_int ncolele=A->p[column+1]-A->p[column];
     for(scs_int j=0;j<ncolele;j++){
       scs_int row_index=A->i[column_data_index];
@@ -141,19 +152,25 @@ void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, sc
       }
       column_data_index++;
     }
-
+    accumulate_subdiag_time+=SCS(tocq)(&init_timer);
     //zero out ATnz
+    SCS(tic)(&init_timer);
     for(scs_int j=0;j<A->m;j++){
       ATnz[j]=0;
     }
+    zero_ATnz_time+=SCS(tocq)(&init_timer);
   }
 
   scs_free(ATnz);
   scs_free(ATx);
+
+  scs_printf("Allocate: %f diagonal: %f get_A'x: %f accumulate subdiag: %f zero A'nz: %f\n",allocation_time,diagonal_time,get_ATx_time,accumulate_subdiag_time,zero_ATnz_time);
 }
 
 ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
                                      const scs_float *diag_r) {
+  SCS(timer) init_timer;
+  SCS(tic)(&init_timer);
   ScsLinSysWork *p = (ScsLinSysWork *)scs_calloc(1, sizeof(ScsLinSysWork));
   scs_int n_plus_m = A->n + A->m, ldl_status, ldl_prepare_status;
   p->m = A->m;
@@ -173,20 +190,29 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
   p->diag_r = diag_r;
   p->A = A;
   p->scaled_zy_space = (scs_float *)scs_calloc(A->m,sizeof(scs_float));
+  scs_float allocation_time=SCS(tocq)(&init_timer);
 
+  SCS(tic)(&init_timer);
   //populate diagonal and subdiagonal of P
   if (P) {
     get_symmetric_diagonal_and_subdiagonal(P,p->Pdiag,p->Psubdiag);
   }
+  scs_float parseP_time=SCS(tocq)(&init_timer);
 
   //compute ATA
+  SCS(tic)(&init_timer);
   compute_symmetric_tridiagonal_ATA(A,p->ATAdiag,p->ATAsubdiag);
-
+  scs_float ATA_time=SCS(tocq)(&init_timer);
   //form the matrix we need to factorize
+  SCS(tic)(&init_timer);
   form_symmetric_tridiagonal(p);
-
+  scs_float form_system_time=SCS(tocq)(&init_timer);
   //factorize
+  SCS(tic)(&init_timer);
   ldl_status = ldl_factor(p);
+  scs_float factor_time=SCS(tocq)(&init_timer);
+
+  scs_printf("Allocate: %f ParseP: %f ATA: %f Form System: %f Factor: %f\n",allocation_time,parseP_time,ATA_time,form_system_time,factor_time);
   if (ldl_status != 0) {
     scs_printf("Error in LDL initial factorization.\n");
     /* TODO: this is broken somehow */
