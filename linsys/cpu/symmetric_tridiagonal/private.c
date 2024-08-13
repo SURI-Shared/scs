@@ -1,5 +1,4 @@
 #include "private.h"
-#include "util.h"
 
 const char *scs_get_lin_sys_method() {
   return "symmetric-tridiagonal";
@@ -101,9 +100,7 @@ void get_symmetric_diagonal_and_subdiagonal(const ScsMatrix *M, scs_float* diago
 }
 
 void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, scs_float* ATAsubdiag){
-  //we assume that A'A is symmetric tridiagonal
-  SCS(timer) init_timer;
-  SCS(tic)(&init_timer);
+  //we assume that A'A is symmetric tridiagonal and that A->i is increasing within each column
   //compute diagonal elements as sum of squares of elements of columns of A
   scs_int data_index=0;
   for(scs_int i=0;i<A->n;i++){
@@ -114,63 +111,44 @@ void compute_symmetric_tridiagonal_ATA(const ScsMatrix *A,scs_float* ATAdiag, sc
       data_index++;
     }
   }
-  scs_float diagonal_time=SCS(tocq)(&init_timer);
   //compute subdiagonal elements of A'A as dot(A[:,column+1],A[:,column])
-  //TODO: see if there are better ways to efficiently compute the subdiagonal of ATA
-  SCS(tic)(&init_timer);
-  char* ATnz=(char*) scs_calloc(A->m,sizeof(char));
-  scs_float* ATx=(scs_float*) scs_calloc(A->m,sizeof(scs_float));
-  data_index=A->p[1]-A->p[0];//index of the first non-zero in the 1th column of A
-  scs_int column_data_index=0;
+  scs_int ATdata_index;//index of current non-zero in A'
+  scs_int Adata_index;//index of current non-zero in A
+  scs_int ATcolumn=0;//column of current non-zero of A'
+  scs_int Arow=0;//row of current non-zero of A
 
-  scs_float get_ATx_time=0;
-  scs_float accumulate_subdiag_time=0;
-  scs_float zero_ATnz_time=0;
-  scs_float allocation_time=SCS(tocq)(&init_timer);
+  for(scs_int Acolumn=0;Acolumn<A->n-1;Acolumn++){//Acolumn is the index both of the element of the subdiagonal, and of the column of A that contributes to it
 
-  for(scs_int column=0;column<A->n-1;column++){
-    SCS(tic)(&init_timer);
-    scs_int ATrowindex=column+1;
-    ATAsubdiag[column]=0;
-    scs_int nele=A->p[ATrowindex+1]-A->p[ATrowindex];//num nonzero elements in the ATrowindex row of A'
+    scs_int ATrow=Acolumn+1;//the ith subdiagonal results from row i+1 of A' times column i of A
+    ATAsubdiag[Acolumn]=0;
 
-    //pull out the dense representation of row ATrowindex of A', which is the same as the ATrowindex column of A
-    for(scs_int j=0;j<nele;j++){
-      ATx[A->i[data_index]]=A->x[data_index];
-      ATnz[A->i[data_index]]=1;
-      data_index++;
-    }
-    get_ATx_time+=SCS(tocq)(&init_timer);
-    //loop over the nonzeros in the column of A
-    SCS(tic)(&init_timer);
-    scs_int ncolele=A->p[column+1]-A->p[column];
-    for(scs_int j=0;j<ncolele;j++){
-      scs_int row_index=A->i[column_data_index];
-      if(ATnz[row_index]!=0){
-        //the corresponding term in A' is also non-zero
-        ATAsubdiag[column]+=ATx[row_index]*A->x[column_data_index];
+    ATdata_index=A->p[ATrow];//first element of row i+1 of A'
+    Adata_index=A->p[Acolumn];//first element of column i of A
+
+    while(ATdata_index<A->p[ATrow+1] && Adata_index<A->p[Acolumn+1]){//while we have not exhausted all non-zeros in either the row of A' or the column of A
+      ATcolumn=A->i[ATdata_index];//column of the current non-zero element of row ATrow of A'
+      Arow=A->i[Adata_index];//row of the current non-zero element of column Acolumn of A
+      if(ATcolumn==Arow){//non-zeros line up and thus their product should be added to the subdiagonal term
+        ATAsubdiag[Acolumn]+=A->x[ATdata_index]*A->x[Adata_index];
+        //advance to next non-zero elements
+        ATdata_index++;
+        Adata_index++;
+      }else if(ATcolumn<Arow){
+        //advance the A' index
+        ATdata_index++;
+      }else if(Arow<ATcolumn){
+        //advance the A index
+        Adata_index++;
+      }else{
+        printf("Error in computing A'A's subdiagonal. A' is at (%i,%i), A is at (%i,%i).\n",ATrow,ATcolumn,Arow,Acolumn);
       }
-      column_data_index++;
+
     }
-    accumulate_subdiag_time+=SCS(tocq)(&init_timer);
-    //zero out ATnz
-    SCS(tic)(&init_timer);
-    for(scs_int j=0;j<A->m;j++){
-      ATnz[j]=0;
-    }
-    zero_ATnz_time+=SCS(tocq)(&init_timer);
   }
-
-  scs_free(ATnz);
-  scs_free(ATx);
-
-  scs_printf("Allocate: %f diagonal: %f get_A'x: %f accumulate subdiag: %f zero A'nz: %f\n",allocation_time,diagonal_time,get_ATx_time,accumulate_subdiag_time,zero_ATnz_time);
 }
 
 ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
                                      const scs_float *diag_r) {
-  SCS(timer) init_timer;
-  SCS(tic)(&init_timer);
   ScsLinSysWork *p = (ScsLinSysWork *)scs_calloc(1, sizeof(ScsLinSysWork));
   scs_int n_plus_m = A->n + A->m, ldl_status, ldl_prepare_status;
   p->m = A->m;
@@ -190,29 +168,21 @@ ScsLinSysWork *scs_init_lin_sys_work(const ScsMatrix *A, const ScsMatrix *P,
   p->diag_r = diag_r;
   p->A = A;
   p->scaled_zy_space = (scs_float *)scs_calloc(A->m,sizeof(scs_float));
-  scs_float allocation_time=SCS(tocq)(&init_timer);
 
-  SCS(tic)(&init_timer);
   //populate diagonal and subdiagonal of P
   if (P) {
     get_symmetric_diagonal_and_subdiagonal(P,p->Pdiag,p->Psubdiag);
   }
-  scs_float parseP_time=SCS(tocq)(&init_timer);
 
   //compute ATA
-  SCS(tic)(&init_timer);
   compute_symmetric_tridiagonal_ATA(A,p->ATAdiag,p->ATAsubdiag);
-  scs_float ATA_time=SCS(tocq)(&init_timer);
-  //form the matrix we need to factorize
-  SCS(tic)(&init_timer);
-  form_symmetric_tridiagonal(p);
-  scs_float form_system_time=SCS(tocq)(&init_timer);
-  //factorize
-  SCS(tic)(&init_timer);
-  ldl_status = ldl_factor(p);
-  scs_float factor_time=SCS(tocq)(&init_timer);
 
-  scs_printf("Allocate: %f ParseP: %f ATA: %f Form System: %f Factor: %f\n",allocation_time,parseP_time,ATA_time,form_system_time,factor_time);
+  //form the matrix we need to factorize
+  form_symmetric_tridiagonal(p);
+
+  //factorize
+  ldl_status = ldl_factor(p);
+
   if (ldl_status != 0) {
     scs_printf("Error in LDL initial factorization.\n");
     /* TODO: this is broken somehow */
