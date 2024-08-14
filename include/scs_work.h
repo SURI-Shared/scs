@@ -46,6 +46,7 @@ typedef struct {
 struct SCS_WORK {
   /* x_prev = x from previous iteration */
   scs_float setup_time;       /* time taken for setup phase (milliseconds) */
+  scs_float init_lin_sys_time; /*time taken for scs_init_lin_sys_work*/
   scs_int time_limit_reached; /* boolean, if the time-limit is reached */
   scs_float *u, *u_t;
   scs_float *v, *v_prev;

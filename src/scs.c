@@ -541,6 +541,7 @@ static void finalize(ScsWork *w, ScsSolution *sol, ScsInfo *info,
   sty = SCS(dot)(sol->s, sol->y, w->d->m);
 
   info->setup_time = w->setup_time;
+  info->init_lin_sys_time = w->init_lin_sys_time;
   info->iter = iter;
   info->res_infeas = w->r_orig->res_infeas;
   info->res_unbdd_a = w->r_orig->res_unbdd_a;
@@ -890,7 +891,12 @@ static ScsWork *init_work(const ScsData *d, const ScsCone *k,
   /* set w->*_orig and performs normalization if appropriate */
   scs_update(w, w->d->b, w->d->c);
 
-  if (!(w->p = scs_init_lin_sys_work(w->d->A, w->d->P, w->diag_r))) {
+  SCS(timer) init_lin_sys_timer;
+  SCS(tic)(&init_lin_sys_timer);
+  w->p = scs_init_lin_sys_work(w->d->A, w->d->P, w->diag_r);
+  w->init_lin_sys_time=SCS(tocq)(&init_lin_sys_timer);
+
+  if (!(w->p)) {
     scs_printf("ERROR: init_lin_sys_work failure\n");
     return SCS_NULL;
   }

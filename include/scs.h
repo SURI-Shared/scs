@@ -196,6 +196,8 @@ typedef struct {
   scs_int rejected_accel_steps;
   /** Number of accepted AA steps. */
   scs_int accepted_accel_steps;
+  /** Time spent (milliseconds) on first scs_init_lin_sys_work call */
+  scs_float init_lin_sys_time;
   /** Total time (milliseconds) spent in the linear system solver. */
   scs_float lin_sys_time;
   /** Total time (milliseconds) spent in the cone projection. */
