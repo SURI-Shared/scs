@@ -324,6 +324,11 @@ scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsCo
   return 0;
 }
 
+__global__ void _cuda_proj_dual_cone_prepare_kernel(scs_float* x, ScsCone* k, scs_int scaled_cones, scs_float* scal_D, scs_float* r_y){
+  /* x -> - Rx */
+  scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
+  x[i] *= r_y ? -r_y[i] : -1;
+}
 /* CUDA cone projection routine, performs projection in-place.
    If normalize > 0 then will use normalized (equilibrated) cones if applicable.
 
@@ -336,12 +341,6 @@ scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsCo
     `||x||_R = \sqrt{x ' R x}`.
 
 */
-__global__ void _cuda_proj_dual_cone_prepare_kernel(scs_float* x, ScsCone* k, scs_int scaled_cones, scs_float* scal_D, scs_float* r_y){
-  /* x -> - Rx */
-  scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
-  x[i] *= r_y ? -r_y[i] : -1;
-}
-
 int _cuda_proj_dual_cone_host(float *x, ScsConeWork *c, ScsScaling *scal,
                             float *r_y) {
   ScsCone *k = c->k;
