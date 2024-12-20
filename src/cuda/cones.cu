@@ -118,6 +118,8 @@ static scs_float cuda_proj_box_cone(scs_float *tx, const scs_float *bl,
       break;
     }
   }
+  cudaFree(gt_dev);
+  cudaFree(ht_dev);
   if (iter == BOX_CONE_MAX_ITERS) {
     scs_printf("warning: box cone proj hit maximum %i iters\n", (int)iter);
   }
@@ -242,7 +244,7 @@ scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsCo
       r_box = &(r_y[cone_index]);
     }
     /* project onto box cone */
-    c->box_t_warm_start = proj_box_cone(&(x[cone_index]), k->bl, k->bu, k->bsize,
+    c->box_t_warm_start = cuda_proj_box_cone(&(x[cone_index]), k->bl, k->bu, k->bsize,
                                         c->box_t_warm_start, r_box);
     done=1;
   }
