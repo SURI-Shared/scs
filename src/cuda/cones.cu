@@ -35,13 +35,12 @@ void cuda_normalize_box_cone(scs_int j, ScsCone *k, scs_float *D, scs_int bsize)
   }
 }
 
-void cuda_scale_box_cone(ScsCone *k, ScsConeWork *c, ScsScaling *scal) {
+void cuda_scale_box_cone(ScsCone *k, scs_float* scal_D) {
   if (k->bsize && k->bu && k->bl) {
-    c->box_t_warm_start = 1.;
-    if (scal) {
+    if (scal_D) {
       /* also does some sanitizing */
       scs_int j = blockIdx.x*blockDim.x+threadIdx.x;
-      cuda_normalize_box_cone(j,k, &(scal->D[k->z + k->l]), k->bsize);
+      cuda_normalize_box_cone(j,k, &(scal_D[k->z + k->l]), k->bsize);
     }
   }
 }
@@ -325,7 +324,7 @@ scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsCo
   return 0;
 }
 
-/* CUDA Kernel for cone projection routine, performs projection in-place.
+/* CUDA cone projection routine, performs projection in-place.
    If normalize > 0 then will use normalized (equilibrated) cones if applicable.
 
    Moreau decomposition for R-norm projections:
@@ -337,36 +336,56 @@ scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsCo
     `||x||_R = \sqrt{x ' R x}`.
 
 */
-__global__
-void _cuda_proj_dual_cone_kernel(scs_float *x, ScsConeWork *c, ScsScaling *scal,
-                            scs_float *r_y) {
-  int status, i;
-  ScsCone *k = c->k;
-
-  if (!c->scaled_cones) {
-    cuda_scale_box_cone(k, c, scal);
-    c->scaled_cones = 1;
-  }
-
-  /* copy s = x */
-  i=blockIdx.x*blockDim.x+threadIdx.x;
-  c->s[i]=x[i];
-
+__global__ void _cuda_proj_dual_cone_prepare_kernel(scs_float* x, ScsCone* k, scs_int scaled_cones, scs_float* scal_D, scs_float* r_y){
   /* x -> - Rx */
+  scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
   x[i] *= r_y ? -r_y[i] : -1;
-
-  /* project -x onto cone, x -> \Pi_{C^*}^{R^{-1}}(-x) under r_y metric */
-  status = cuda_proj_cone(i,x, k, c, scal ? 1 : 0, r_y);
-
-  /* return x + R^{-1} \Pi_{C^*}^{R^{-1}} ( -x )  */
-  if (r_y) {
-    x[i] = x[i] / r_y[i] + c->s[i];
-  } else {
-    x[i] += c->s[i];
-  }
 }
 
 int _cuda_proj_dual_cone_host(float *x, ScsConeWork *c, ScsScaling *scal,
                             float *r_y) {
-    
+  ScsCone *k = c->k;
+
+  if (!c->scaled_cones) {
+    scale_box_cone(k, c, scal);
+    c->scaled_cones = 1;
+  }
+
+  scs_float *x_dev,*scal_D_dev,*r_y_dev,*s_dev;
+  ScsCone* k_dev;
+  cudaMalloc(&x_dev,c->m*sizeof(scs_float));
+  cudaMalloc(&r_y_dev,c->m*sizeof(scs_float));
+  cudaMalloc(&k_dev,sizeof(ScsCone));
+  cudaMalloc(&scal_D_dev,scal->m*sizeof(scs_float));
+  cudaMalloc(&s_dev,c->m*sizeof(scs_float));
+
+  cudaMemcpy(x_dev,x,c->m*sizeof(scs_float),cudaMemcpyHostToDevice);
+  cudaMemcpy(r_y_dev,r_y,c->m*sizeof(scs_float),cudaMemcpyHostToDevice);
+  cudaMemcpy(k_dev,k,sizeof(ScsCone),cudaMemcpyHostToDevice);//TODO: figure out how to get ScsCone onto device
+  cudaMemcpy(scal_D_dev,scal->D,scal->m*sizeof(scs_float),cudaMemcpyHostToDevice);
+  cudaMemcpy(s_dev,x,c->m*sizeof(scs_float),cudaMemcpyHostToDevice);
+
+  _cuda_proj_dual_cone_prepare_kernel<<<1,256>>>(x_dev,k_dev,c->scaled_cones,scal_D_dev,r_y_dev);
+  c->scaled_cones=1;
+  if (k->bsize && k->bu && k->bl) {
+    c->box_t_warm_start = 1.;//on CPU this is set by scale_box_cone, but we don't want to mess around pushing c to and from the device.
+  }
+
+  /* project -x onto cone, x -> \Pi_{C^*}^{R^{-1}}(-x) under r_y metric */
+  int status = cuda_proj_cone(x, k, c, scal ? 1 : 0, r_y);
+
+  _cuda_proj_dual_cone_finalize_kernel<<<1,256>>>(x_dev,s_dev,r_y_dev);
+
+  cudaMemcpy(x,x_dev,c->m*sizeof(scs_float),cudaMemcpyHostToDevice);
+  return status;    
+}
+
+__global__ void _cuda_proj_dual_cone_finalize_kernel(scs_float* x, scs_float* s,scs_float* r_y){
+/* return x + R^{-1} \Pi_{C^*}^{R^{-1}} ( -x )  */
+  scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
+  if (r_y) {
+    x[i] = x[i] / r_y[i] + s[i];
+  } else {
+    x[i] += s[i];
+  }
 }

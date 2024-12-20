@@ -44,6 +44,7 @@ void SCS(finish_cone)(ScsConeWork *c);
 void SCS(set_r_y)(const ScsConeWork *c, scs_float scale, scs_float *r_y);
 void SCS(enforce_cone_boundaries)(const ScsConeWork *c, scs_float *vec,
                                   scs_float (*f)(const scs_float *, scs_int));
+void scale_box_cone(ScsCone *k, ScsConeWork *c, ScsScaling *scal);
 
 #ifdef __cplusplus
 }
