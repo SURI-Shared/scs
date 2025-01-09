@@ -207,20 +207,114 @@ static void proj_power_cone(scs_float *v, scs_float a) {
   v[1] = y;
   v[2] = (v[2] < 0) ? -(r) : (r);
 }
+/* project onto the primal K cone in the paper */
+/* the r_y vector determines the INVERSE metric, ie, project under the
+ * diag(r_y)^-1 norm.
+ */
+static scs_int proj_cone(scs_float *x, const ScsCone *k, ScsConeWork *c,
+                         scs_int normalize, scs_float *r_y) {
+  scs_int i, status;
+  scs_int count = 0;
+  scs_float *r_box = SCS_NULL;
+
+  if (k->z) { /* doesn't use r_y */
+    /* project onto primal zero / dual free cone */
+    memset(x, 0, k->z * sizeof(scs_float));
+    count += k->z;
+  }
+
+  if (k->l) { /* doesn't use r_y */
+    /* project onto positive orthant */
+    for (i = count; i < count + k->l; ++i) {
+      x[i] = MAX(x[i], 0.0);
+    }
+    count += k->l;
+  }
+
+  if (k->bsize) { /* DOES use r_y */
+    if (r_y) {
+      r_box = &(r_y[count]);
+    }
+    /* project onto box cone */
+    c->box_t_warm_start = proj_box_cone(&(x[count]), k->bl, k->bu, k->bsize,
+                                        c->box_t_warm_start, r_box);
+    count += k->bsize; /* since b = (t,s), len(s) = bsize - 1 */
+  }
+
+  if (k->qsize && k->q) { /* doesn't use r_y */
+    /* project onto second-order cones */
+    for (i = 0; i < k->qsize; ++i) {
+      proj_soc(&(x[count]), k->q[i]);
+      count += k->q[i];
+    }
+  }
+
+  if (k->ssize && k->s) { /* doesn't use r_y */
+    /* project onto PSD cones */
+    for (i = 0; i < k->ssize; ++i) {
+      status = proj_semi_definite_cone(&(x[count]), k->s[i], c);
+      if (status < 0) {
+        return status;
+      }
+      count += get_sd_cone_size(k->s[i]);
+    }
+  }
+
+  if (k->ep || k->ed) { /* doesn't use r_y */
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+    for (i = 0; i < k->ep + k->ed; ++i) {
+      /* provided in exp_cone.c */
+      SCS(proj_pd_exp_cone)(&(x[count + 3 * i]), i < k->ep);
+    }
+    count += 3 * (k->ep + k->ed);
+  }
+  if (k->psize && k->p) { /* doesn't use r_y */
+    scs_float v[3];
+    scs_int idx;
+    /* don't use openmp for power cone
+    ifdef _OPENMP
+    pragma omp parallel for private(v, idx)
+    endif
+    */
+    for (i = 0; i < k->psize; ++i) { /* doesn't use r_y */
+      idx = count + 3 * i;
+      if (k->p[i] >= 0) {
+        /* primal power cone */
+        proj_power_cone(&(x[idx]), k->p[i]);
+      } else {
+        /* dual power cone, using Moreau */
+        v[0] = -x[idx];
+        v[1] = -x[idx + 1];
+        v[2] = -x[idx + 2];
+
+        proj_power_cone(v, -k->p[i]);
+
+        x[idx] += v[0];
+        x[idx + 1] += v[1];
+        x[idx + 2] += v[2];
+      }
+    }
+    count += 3 * k->psize;
+  }
+  /* project onto OTHER cones */
+  return 0;
+}
 
 /* project onto the primal K cone in the paper */
 /* the r_y vector determines the INVERSE metric, ie, project under the
  * diag(r_y)^-1 norm.
  */
-scs_int cuda_proj_cone(scs_int cone_index, scs_float *x, const ScsCone *k, ScsConeWork *c,
-                         scs_int normalize, scs_float *r_y) {
+scs_int cuda_proj_cone(scs_float *x_dev, const ScsCone*k, const ScsCone *k_dev, ScsConeWork *c,
+                         scs_int normalize, scs_float *r_y_dev) {
   scs_int done=0;
   scs_int vector_index=0;
   scs_int cone_count=0;
 
   scs_float *r_box = SCS_NULL;
 
-  if (cone_index<k->z) { /* doesn't use r_y */
+  if (k->z) { /* doesn't use r_y */
     /* project onto primal zero / dual free cone */
     x[cone_index]=0;
     done=1;
