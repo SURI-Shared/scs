@@ -35,6 +35,7 @@ void cuda_normalize_box_cone(scs_int j, ScsCone *k, scs_float *D, scs_int bsize)
   }
 }
 
+//figure out which index into the box cone constraints the current thread is responsible for and apply scaling
 void cuda_scale_box_cone(ScsCone *k, scs_float* scal_D) {
   if (k->bsize && k->bu && k->bl) {
     if (scal_D) {
@@ -45,6 +46,8 @@ void cuda_scale_box_cone(ScsCone *k, scs_float* scal_D) {
   }
 }
 
+///Kernel for box cone projection
+///Box cone projection uses Newton's method; this kernel accumulates the gradient and hessian across the rows of the box cone
 __global__ void cuda_proj_box_cone_grad_hess_kernel(const scs_float *bl,const scs_float* bu,const scs_int bsize,const scs_float t,const scs_float* x, const scs_float* rho, scs_float* gt_ele, scs_float* ht_ele){
   scs_int j = threadIdx.x;
   if (j<bsize-1){
@@ -70,7 +73,7 @@ __global__ void cuda_proj_box_cone_grad_hess_kernel(const scs_float *bl,const sc
 
 /* Project onto { (t, s) | t * l <= s <= t * u, t >= 0 }, Newton's method on t
    tx = [t; s], total length = bsize, under Euclidean metric 1/r_box.
-   Using a single CUDA thread
+   Uses a single CUDA thread per row of the box cone by launching kernels. Modern CUDA can do so within another kernel.
 */
 static scs_float cuda_proj_box_cone(scs_float *tx, const scs_float *bl,
                                const scs_float *bu, scs_int bsize,
@@ -166,7 +169,7 @@ void cuda_proj_soc(scs_float *x, scs_int q) {
     }
   }
 }
-
+//TODO:power cone projection not updated for CUDA
 static void proj_power_cone(scs_float *v, scs_float a) {
   scs_float xh = v[0], yh = v[1], rh = ABS(v[2]);
   scs_float x = 0.0, y = 0.0, r;
@@ -210,6 +213,7 @@ static void proj_power_cone(scs_float *v, scs_float a) {
 /* project onto the primal K cone in the paper */
 /* the r_y vector determines the INVERSE metric, ie, project under the
  * diag(r_y)^-1 norm.
+ * COPIED for reference; cuda_proj_cone is meant to be the // implementation
  */
 static scs_int proj_cone(scs_float *x, const ScsCone *k, ScsConeWork *c,
                          scs_int normalize, scs_float *r_y) {
@@ -302,9 +306,11 @@ static scs_int proj_cone(scs_float *x, const ScsCone *k, ScsConeWork *c,
   return 0;
 }
 
-/* project onto the primal K cone in the paper */
+/* project one of the cones onto its primal K cone using a single GPU thread */
 /* the r_y vector determines the INVERSE metric, ie, project under the
  * diag(r_y)^-1 norm.
+ * TODO: currently this is a device function that expects to receive a cone_index value that tells it which of the cone constraints it is supposed to project. cone_index is not currently passed in though.
+ * TODO: Some of the cone projections launch additional kernels; this is allowed under some conditions but I haven't confirmed they are met here.
  */
 scs_int cuda_proj_cone(scs_float *x_dev, const ScsCone*k, const ScsCone *k_dev, ScsConeWork *c,
                          scs_int normalize, scs_float *r_y_dev) {
@@ -418,6 +424,7 @@ scs_int cuda_proj_cone(scs_float *x_dev, const ScsCone*k, const ScsCone *k_dev, 
   return 0;
 }
 
+//kernel function to scale every element of the primal vector according to r_y (see https://www.cvxgrp.org/scs/algorithm/scale.html)
 __global__ void _cuda_proj_dual_cone_prepare_kernel(scs_float* x, ScsCone* k, scs_int scaled_cones, scs_float* scal_D, scs_float* r_y){
   /* x -> - Rx */
   scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
@@ -465,7 +472,7 @@ int _cuda_proj_dual_cone_host(float *x, ScsConeWork *c, ScsScaling *scal,
   }
 
   /* project -x onto cone, x -> \Pi_{C^*}^{R^{-1}}(-x) under r_y metric */
-  int status = cuda_proj_cone(x, k, c, scal ? 1 : 0, r_y);
+  int status = cuda_proj_cone(x, k, c, scal ? 1 : 0, r_y);//TODO: currently cuda_proj_cone is written like a device function, but here we call it on the host. Probably need a _cuda_proj_cone_host to launch _cuda_proj_cone_kernel that then calls cuda_proj_cone with cone_index determined by threadIdx
 
   _cuda_proj_dual_cone_finalize_kernel<<<1,256>>>(x_dev,s_dev,r_y_dev);
 
@@ -473,8 +480,8 @@ int _cuda_proj_dual_cone_host(float *x, ScsConeWork *c, ScsScaling *scal,
   return status;    
 }
 
+/*kernel function to compute x + R^{-1} \Pi_{C^*}^{R^{-1}} ( -x ) on GPU using 1 CUDA thread per element of the primal variables x*/
 __global__ void _cuda_proj_dual_cone_finalize_kernel(scs_float* x, scs_float* s,scs_float* r_y){
-/* return x + R^{-1} \Pi_{C^*}^{R^{-1}} ( -x )  */
   scs_int i=blockIdx.x*blockDim.x+threadIdx.x;
   if (r_y) {
     x[i] = x[i] / r_y[i] + s[i];
