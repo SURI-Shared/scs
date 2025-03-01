@@ -2,6 +2,7 @@
 #include "linalg.h"
 #include "linsys.h"
 #include "util.h"
+#include <stdio.h>
 
 __global__ void _cuda_accum_by_a(scs_float *y, Scs_int *Ap, Scs_int *Ai, Scs_float *Ax, scs_float *x) {
     scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
@@ -68,3 +69,29 @@ void SCS(accum_by_p)(const ScsMatrix *P, const scs_float *x, const scs_data *d, 
     /* y += P_lower x */
     SCS(accum_by_atrans)(P, x, y);
   }
+
+__global__ void _cuda_compute_rsk(scs_float *rski, ScsWork *w) {
+  scs_int i= blockIdx.x*blockDim.x + threadIdx.x;
+  rski[i] *= (w->v[i] + w->u[i] - 2 * w->u_t[i]) * w->diag_r[i];
+}
+
+void SCS(compute_rsk)(ScsWork *w) {
+    scs_float rski_dev;
+    scs_int l = w->d->m + w->d->n + 1;
+    cudaMalloc(&rski_dev,l*sizeof(scs_float));
+    _cuda_compute_rsk<<<(l+255)/256, 256>>>(rski_dev, w);
+    cudaMemcpy(rski_dev,w->rsk,l*sizeof(scs_float),cudaMemcpyHostToDevice);
+  }
+
+__global__ void _cuda_update_dual_vars(scs_float *vi_dev, ScsWork *w) {
+  scs_int i= blockIdx.x*blockDim.x + threadIdx.x;
+  w->v[i] += w->stgs->alpha * (w->u[i] - w->u_t[i]);
+}
+
+void SCS(update_dual_vars)(ScsWork *w) {
+  scs_float vi_dev;
+  scs_int i, l = w->d->n + w->d->m + 1;
+  cudaMalloc(&vi_dev,l*sizeof(scs_float));
+  _cuda_update_dual_vars<<<(l+255)/256, 256>>>(vi_dev, w);
+  cudaMemcpy(vi_dev,w->v,l*sizeof(scs_float),cudaMemcpyHostToDevice);
+}

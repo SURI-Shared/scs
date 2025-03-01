@@ -48,16 +48,11 @@ src/linalg.o: src/linalg.c $(INC_FILES)
 src/ctrl.o  : src/ctrl.c $(INC_FILES)
 src/scs_version.o: src/scs_version.c $(INC_FILES)
 
-
-
 $(DIRSRC)/private.o: $(DIRSRC)/private.c  $(DIRSRC)/private.h
 $(INDIRSRC)/indirect/private.o: $(INDIRSRC)/private.c $(INDIRSRC)/private.h
 $(MKLSRC)/private.o: $(MKLSRC)/private.c  $(MKLSRC)/private.h
-# $(LINSYS)/scs_matrix.o: $(LINSYS)/scs_matrix.cu $(LINSYS)/scs_matrix.h
+$(LINSYS)/scs_matrix.o: $(LINSYS)/scs_matrix.c $(LINSYS)/scs_matrix.h
 $(LINSYS)/csparse.o: $(LINSYS)/csparse.c $(LINSYS)/csparse.h
-
-$(LINSYS)/scs_matrix.o $(INC_FILES):
-	nvcc -lcuda -L/usr/bin/nvcc -lcudart  -I. -Iinclude -Ilinsys -O3  -DCTRLC=1  -DGPU_TRANSPOSE_MAT=1  -DUSE_LAPACK -c -o $(LINSYS)/scs_matrix.o  $(LINSYS)/scs_matrix.cu 
 
 $(OUT)/libscsdir.a: $(SCS_O) $(SCS_OBJECTS) $(DIRSRC)/private.o $(AMD_OBJS) $(LDL_OBJS) $(LINSYS)/scs_matrix.o $(LINSYS)/csparse.o
 	mkdir -p $(OUT)

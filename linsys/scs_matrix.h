@@ -65,6 +65,10 @@ void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x, scs_float *y);
  */
 void SCS(accum_by_p)(const ScsMatrix *P, const scs_float *x, scs_float *y);
 
+void SCS(compute_rsk)(ScsWork *w);
+
+void SCS(update_dual_vars)(ScsWork *w);
+
 #ifdef __cplusplus
 }
 #endif
