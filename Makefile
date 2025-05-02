@@ -44,7 +44,7 @@ src/cones.o	: src/cones.c $(INC_FILES)
 src/exp_cone.o	: src/exp_cone.c $(INC_FILES)
 src/aa.o	: src/aa.c $(INC_FILES)
 src/rw.o	: src/rw.c $(INC_FILES)
-src/linalg.o: src/linalg.c $(INC_FILES)
+# src/linalg.o: src/linalg.c $(INC_FILES)
 src/ctrl.o  : src/ctrl.c $(INC_FILES)
 src/scs_version.o: src/scs_version.c $(INC_FILES)
 
@@ -56,8 +56,11 @@ $(MKLSRC)/private.o: $(MKLSRC)/private.c  $(MKLSRC)/private.h
 # $(LINSYS)/scs_matrix.o: $(LINSYS)/scs_matrix.cu $(LINSYS)/scs_matrix.h
 $(LINSYS)/csparse.o: $(LINSYS)/csparse.c $(LINSYS)/csparse.h
 
-$(LINSYS)/scs_matrix.o $(INC_FILES):
-	nvcc -lcuda -L/usr/bin/nvcc -lcudart  -I. -Iinclude -Ilinsys -O3  -DCTRLC=1  -DGPU_TRANSPOSE_MAT=1  -DUSE_LAPACK -c -o $(LINSYS)/scs_matrix.o  $(LINSYS)/scs_matrix.cu 
+src/linalg.o: src/linalg.cu 
+	nvcc -c -o $@ $^ $(CUDAFLAGS)
+
+$(LINSYS)/scs_matrix.o: $(LINSYS)/scs_matrix.cu
+	nvcc -c -o $@ $^ $(CUDAFLAGS)
 
 $(OUT)/libscsdir.a: $(SCS_O) $(SCS_OBJECTS) $(DIRSRC)/private.o $(AMD_OBJS) $(LDL_OBJS) $(LINSYS)/scs_matrix.o $(LINSYS)/csparse.o
 	mkdir -p $(OUT)
@@ -76,7 +79,7 @@ $(OUT)/libscsmkl.a: $(SCS_O) $(SCS_OBJECTS) $(MKLSRC)/private.o $(LINSYS)/scs_ma
 
 $(OUT)/libscsdir.$(SHARED): $(SCS_O) $(SCS_OBJECTS) $(DIRSRC)/private.o $(AMD_OBJS) $(LDL_OBJS) $(LINSYS)/scs_matrix.o $(LINSYS)/csparse.o
 	mkdir -p $(OUT)
-	$(CC) $(CFLAGS) -shared -Wl,$(SONAME),$(@:$(OUT)/%=%) -o $@ $^ $(LDFLAGS) $(BLASLDFLAGS)
+	$(CC) $(CFLAGS) -shared -Wl,$(SONAME),$(@:$(OUT)/%=%) -o $@ $^ $(LDFLAGS) $(BLASLDFLAGS) $(CUDARTFLAGS)
 
 $(OUT)/libscsindir.$(SHARED): $(SCS_INDIR_O) $(SCS_OBJECTS) $(INDIRSRC)/private.o $(LINSYS)/scs_matrix.o $(LINSYS)/csparse.o
 	mkdir -p $(OUT)

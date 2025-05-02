@@ -4,7 +4,7 @@ else
 UNAME = $(shell uname -s)
 endif
 
-#CC = gcc
+CC = gcc
 # For cross-compiling with mingw use these.
 #CC = i686-w64-mingw32-gcc -m32
 #CC = x86_64-w64-mingw32-gcc-4.8
@@ -55,11 +55,11 @@ ifeq ($(CUDA_PATH), )
 CUDA_PATH=/usr/local/cuda
 endif
 CULDFLAGS = -L$(CUDA_PATH)/lib -L$(CUDA_PATH)/lib64 -lcudart -lcublas -lcusparse
-CUDAFLAGS = $(CFLAGS) -I$(CUDA_PATH)/include -Ilinsys/gpu -Wno-c++11-long-long # turn off annoying long-long warnings in cuda header files
+CUDAFLAGS = -L$(CUDA_PATH)/lib -I$(CUDA_PATH)/include -lcuda -lcudart -Iinclude -Ilinsys -Xcompiler -fPIC # turn off annoying long-long warnings in cuda header files
 
 # Add on default CFLAGS
 OPT = -O3
-override CFLAGS += -g -Wall -Wwrite-strings -pedantic -funroll-loops -Wstrict-prototypes -I. -Iinclude -Ilinsys $(OPT)
+override CFLAGS += -g -Wall -Wwrite-strings -pedantic -funroll-loops -Wstrict-prototypes -L$(CUDA_PATH)/lib -L$(CUDA_PATH)/lib64  -I. -Iinclude -Ilinsys $(OPT)
 ifneq ($(ISWINDOWS), 1)
 override CFLAGS += -fPIC
 endif
@@ -155,7 +155,7 @@ BLASLDFLAGS =
 USE_LAPACK = 1
 ifneq ($(USE_LAPACK), 0)
   # edit these for your setup:
-  BLASLDFLAGS += -llapack -lblas # -lgfortran
+  BLASLDFLAGS += -llapack -lblas -lcuda -lcudart# -lgfortran
   CUSTOM_FLAGS += -DUSE_LAPACK
 
   BLAS64 = 0
