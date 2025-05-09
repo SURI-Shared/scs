@@ -13,3 +13,6 @@ large-scale convex cone problems. The current version is `3.2.7`.
 The full documentation is available [here](https://www.cvxgrp.org/scs/).
 
 If you wish to cite SCS please cite the papers listed [here](https://www.cvxgrp.org/scs/citing).
+
+Preliminary GPU translation in scs_matrix.cu and linalg.cu was performed using Cuda version 12.8 on an Nvidia 4070 super. In order to get the Cuda 
+code to work, must define CULFFLAGS, CUDAFLAGS, and CUDA_PATH in scs.mk. Was not able to replicate results or compile on a seperate pc.

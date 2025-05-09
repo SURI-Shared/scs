@@ -362,6 +362,11 @@ ScsScaling *SCS(normalize_a_p)(ScsMatrix *P, ScsMatrix *A, ScsConeWork *cone) {
 #endif
   return scal;
 }
+
+/*
+Cuda translation of accum_by_a. Copies all allocated memory to device before performing
+matrix operation in kernel. Same case for accum_by_p and accum_by_atrans.
+*/
 __global__ void _cuda_accum_by_a(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
     scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
     scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
@@ -374,11 +379,7 @@ void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x,  scs_float *y) {
       A in column compressed format
       */
     scs_int n = A->n;
-    scs_int *Ap = A->p;
-    scs_int rows = Ap[n];
-    scs_int *Ai = A->i;
-    scs_float *Ax = A->x;
-    scs_float *y_dev;
+    scs_int rows = A->p[n];
 
     int *d_Ap, *d_Ai;
     scs_float *d_Ax, *d_x, *d_y;
@@ -397,7 +398,7 @@ void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x,  scs_float *y) {
     cudaMemcpy(d_x, x, n * sizeof(scs_float), cudaMemcpyHostToDevice);
 
     cudaMalloc(&d_y,rows* n *sizeof(scs_float));
-    _cuda_accum_by_a<<<1, dim3(rows, n)>>>(d_y, d_Ap, d_Ai, d_Ax, d_x);
+    _cuda_accum_by_a<<<rows, n>>>(d_y, d_Ap, d_Ai, d_Ax, d_x);
     cudaMemcpy(d_y,y,rows* n*sizeof(scs_float),cudaMemcpyDeviceToHost);
     cudaFree(d_Ap);
     cudaFree(d_Ai);
@@ -406,12 +407,12 @@ void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x,  scs_float *y) {
     cudaFree(d_y);
   }
 
-  __global__ void _cuda_accum_by_atrans(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
-    scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
-    scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
-    scs_int i = Ai[p];
-    y[j] += Ax[p] * x[i];
-  }
+__global__ void _cuda_accum_by_atrans(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
+  scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
+  scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
+  scs_int i = Ai[p];
+  y[j] += Ax[p] * x[i];
+}
 
 void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x, 
                           scs_float *y) {
@@ -421,14 +422,31 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
    */
     // scs_int n = A->n;
     scs_int n = A->n;
-    scs_int *Ap = A->p;
-    scs_int rows = Ap[n];
-    scs_int *Ai = A->i;
-    scs_float *Ax = A->x;
-    scs_float *y_dev;
-    cudaMalloc(&y_dev,rows*n *sizeof(scs_float));
-    _cuda_accum_by_atrans<<<1, dim3(rows,n)>>>(y_dev, Ap, Ai, Ax, x);
-    cudaMemcpy(y_dev,y,rows*n*sizeof(scs_float),cudaMemcpyDeviceToHost);
+    scs_int rows = A->p[n];
+
+    int *d_Ap, *d_Ai;
+    scs_float *d_Ax, *d_x, *d_y;
+    // Allocate and copy matrix components
+    cudaMalloc(&d_Ap, (n+1) * sizeof(int));
+    cudaMalloc(&d_Ai, (n+1) * sizeof(int));
+    cudaMalloc(&d_Ax, (n+1) * sizeof(scs_float));
+    
+    cudaMemcpy(d_Ap, A->p, (n+1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Ai, A->i, (n+1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Ax, A->x, (n+1) * sizeof(scs_float), cudaMemcpyHostToDevice);
+
+    // Allocate and copy input vector
+    cudaMalloc(&d_x, n * sizeof(scs_float));
+    cudaMemcpy(d_x, x, n * sizeof(scs_float), cudaMemcpyHostToDevice);
+
+    cudaMalloc(&d_y,rows* n *sizeof(scs_float));
+    _cuda_accum_by_atrans<<<rows, n>>>(d_y, d_Ap, d_Ai, d_Ax, d_x);
+    cudaMemcpy(d_y,y,rows* n*sizeof(scs_float),cudaMemcpyDeviceToHost);
+    cudaFree(d_Ap);
+    cudaFree(d_Ai);
+    cudaFree(d_Ax);
+    cudaFree(d_x);
+    cudaFree(d_y);
 }
 
 __global__ void _cuda_accum_by_p(scs_float *y, scs_int *Pp, scs_int *Pi, scs_float *Px, const scs_float *x) {
@@ -442,17 +460,34 @@ __global__ void _cuda_accum_by_p(scs_float *y, scs_int *Pp, scs_int *Pi, scs_flo
 void SCS(accum_by_p)(const ScsMatrix *P, const scs_float *x, scs_float *y) {
     /* returns y += P x */
     // scs_int p, j, i;
-    scs_int n = P->n;
-    
-    scs_int *Pp = P->p;
-    scs_int rows = Pp[n];
-    scs_int *Pi = P->i;
-    scs_float *Px = P->x;
+
     /* y += P_upper x but skip diagonal entries*/
-    scs_float *y_dev;
-    cudaMalloc(&y_dev,rows * n *sizeof(scs_float));
-    _cuda_accum_by_p<<<1, dim3(rows, n)>>>(y_dev, Pp, Pi, Px, x);
-    cudaMemcpy(y_dev,y,rows*n*sizeof(scs_float),cudaMemcpyDeviceToHost);
+    scs_int n = A->n;
+    scs_int rows = Ap[n];
+
+    int *d_Ap, *d_Ai;
+    scs_float *d_Ax, *d_x, *d_y;
+    // Allocate and copy matrix components
+    cudaMalloc(&d_Pp, (n+1) * sizeof(int));
+    cudaMalloc(&d_Pi, (n+1) * sizeof(int));
+    cudaMalloc(&d_Px, (n+1) * sizeof(scs_float));
+    
+    cudaMemcpy(d_Pp, P->p, (n+1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Pi, P->i, (n+1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Px, P->x, (n+1) * sizeof(scs_float), cudaMemcpyHostToDevice);
+
+    // Allocate and copy input vector
+    cudaMalloc(&d_x, n * sizeof(scs_float));
+    cudaMemcpy(d_x, x, n * sizeof(scs_float), cudaMemcpyHostToDevice);
+
+    cudaMalloc(&d_y,rows* n *sizeof(scs_float));
+    _cuda_accum_by_p<<<rows, n>>>(d_y, d_Pp, d_Pi, d_Px, d_x);
+    cudaMemcpy(d_y,y,rows* n*sizeof(scs_float),cudaMemcpyDeviceToHost);
+    cudaFree(d_Pp);
+    cudaFree(d_Pi);
+    cudaFree(d_Px);
+    cudaFree(d_x);
+    cudaFree(d_y);
     /* y += P_lower x */
     SCS(accum_by_atrans)(P, x, y);
   }
