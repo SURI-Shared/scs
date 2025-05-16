@@ -15,4 +15,6 @@ The full documentation is available [here](https://www.cvxgrp.org/scs/).
 If you wish to cite SCS please cite the papers listed [here](https://www.cvxgrp.org/scs/citing).
 
 Preliminary GPU translation in scs_matrix.cu and linalg.cu was performed using Cuda version 12.8 on an Nvidia 4070 super. In order to get the Cuda 
-code to work, must define CULFFLAGS, CUDAFLAGS, and CUDA_PATH in scs.mk. Was not able to replicate results or compile on a seperate pc.
+code to work, must define CULFFLAGS, CUDAFLAGS, and CUDA_PATH in scs.mk. Was not able to replicate results or compile on a seperate pc. Translations currently are naive and involve copying over all data to the gpu device in every single translated function call meaning that performance is very slow. 
+
+Future updates: Need to store scs data on device permenantly so that the cuda functions can access them without having to copy over data with each call. Additionally, cones.c still needs to be translated. This file contains all of the cone functions and is likely to offer the greatest speedup in terms of performance.
