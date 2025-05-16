@@ -407,6 +407,7 @@ void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x,  scs_float *y) {
     cudaFree(d_y);
   }
 
+/* Same approach as accum_by_a above. */  
 __global__ void _cuda_accum_by_atrans(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
   scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
   scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
@@ -449,6 +450,7 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
     cudaFree(d_y);
 }
 
+/* Same approach as accum_by_a above. */  
 __global__ void _cuda_accum_by_p(scs_float *y, scs_int *Pp, scs_int *Pi, scs_float *Px, const scs_float *x) {
     scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
     scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Pp[j];

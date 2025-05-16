@@ -65,7 +65,8 @@ void SCS(add_scaled_array)(
 
 /*
 Basic parralel reduction to implement block level parralelization in 
-the norm_sq kernel.
+the norm_sq kernel. Inspiration for parralel reduction taken from 
+https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf.
 */
 __global__ void norm_sq_kernel(const scs_float *v, scs_int len, scs_float *result) {
   extern __shared__ scs_float shared_data[];
@@ -143,7 +144,8 @@ scs_float SCS(norm_2)(const scs_float *v, scs_int len) {
 
 /*
 Basic parralel reduction to implement block level parralelization in 
-the dot product kernel. 
+the dot product kernel. Inspiration for parralel reduction taken from 
+https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf.
 */
 __global__ void dot_product_kernel(const scs_float *x, const scs_float *y, scs_int len, scs_float *result) {
   extern __shared__ scs_float shared_data[];
