@@ -362,79 +362,11 @@ extern "C" {
     return scal;
   }
   
+
   /*
-  void SCS(un_normalize_a_p)(ScsMatrix *A, ScsMatrix *P, const ScsScaling *scal) {
-    scs_int i, j;
-    scs_float *D = scal->D;
-    scs_float *E = scal->E;
-    for (i = 0; i < A->n; ++i) {
-      SCS(scale_array)
-      (&(A->x[A->p[i]]), 1. / E[i], A->p[i + 1] - A->p[i]);
-    }
-    for (i = 0; i < A->n; ++i) {
-      for (j = A->p[i]; j < A->p[i + 1]; ++j) {
-        A->x[j] /= D[A->i[j]];
-      }
-    }
-    if (P) {
-      for (i = 0; i < P->n; ++i) {
-        SCS(scale_array)
-        (&(P->x[P->p[i]]), 1. / E[i], P->p[i + 1] - P->p[i]);
-      }
-      for (i = 0; i < P->n; ++i) {
-        for (j = P->p[i]; j < P->p[i + 1]; ++j) {
-          P->x[j] /= E[P->i[j]];
-        }
-      }
-    }
-  }
-  */
-  
-  // void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
-  //                           scs_float *y) {
-  //   /* y += A'*x
-  //      A in column compressed format
-  //      parallelizes over columns (rows of A')
-  //    */
-  //   scs_int p, j;
-  //   scs_int c1, c2;
-  //   scs_float yj;
-  //   scs_int n = A->n;
-  //   scs_int *Ap = A->p;
-  //   scs_int *Ai = A->i;
-  //   scs_float *Ax = A->x;
-  // #ifdef _OPENMP
-  // #pragma omp parallel for private(p, c1, c2, yj)
-  // #endif
-  //   for (j = 0; j < n; j++) {
-  //     yj = y[j];
-  //     c1 = Ap[j];
-  //     c2 = Ap[j + 1];
-  //     for (p = c1; p < c2; p++) {
-  //       yj += Ax[p] * x[Ai[p]];
-  //     }
-  //     y[j] = yj;
-  //   }
-  // }
-  
-  // void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x, scs_float *y) {
-  //   /*y += A*x
-  //     A in column compressed format
-  //     */
-  //   scs_int p, j, i;
-  //   scs_int n = A->n;
-  //   scs_int *Ap = A->p;
-  //   scs_int *Ai = A->i;
-  //   scs_float *Ax = A->x;
-  //   for (j = 0; j < n; j++) { /* col */
-  //     for (p = Ap[j]; p < Ap[j + 1]; p++) {
-  //       i = Ai[p]; /* row */
-  //       y[i] += Ax[p] * x[j];
-  //     }
-  //   }
-  // }
-
-
+  Cuda translation of accum_by_a. Copies all allocated memory to device before performing
+  matrix operation in kernel. Same case for accum_by_p and accum_by_atrans.
+*/
   __global__ void _cuda_accum_by_a(scs_int n, float *y, const scs_int *Ap, const scs_int *Ai, 
     const scs_float *Ax, const scs_float *x) {
     scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
@@ -483,6 +415,7 @@ extern "C" {
     cudaFree(d_y);
   }
 
+  /* Same approach as accum_by_a above. */  
   __global__ void _cuda_accum_by_atrans(int n, float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
   scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
   if (j < n) {
@@ -531,28 +464,7 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
   cudaFree(d_y);
 }
 
-  
-  // /* Since P is upper triangular need to be clever here */
-  // void SCS(accum_by_p)(const ScsMatrix *P, const scs_float *x, scs_float *y) {
-  //   /* returns y += P x */
-  //   scs_int p, j, i;
-  //   scs_int n = P->n;
-  //   scs_int *Pp = P->p;
-  //   scs_int *Pi = P->i;
-  //   scs_float *Px = P->x;
-  //   /* y += P_upper x but skip diagonal entries*/
-  //   for (j = 0; j < n; j++) { /* col */
-  //     for (p = Pp[j]; p < Pp[j + 1]; p++) {
-  //       i = Pi[p];    /* row */
-  //       if (i != j) { /* skip the diagonal */
-  //         y[i] += Px[p] * x[j];
-  //       }
-  //     }
-  //   }
-  //   /* y += P_lower x */
-  //   SCS(accum_by_atrans)(P, x, y);
-  // }
-  
+  /* Same approach as accum_by_a above. */  
   __global__ void _cuda_accum_by_p(int n, float *y, scs_int *Pp, scs_int *Pi, scs_float *Px, const scs_float *x) {
     scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
     if (j < n) {
@@ -598,101 +510,3 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
 
 }
 
-// __global__ void _cuda_accum_by_a(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
-//   scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
-//   scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
-//   scs_int i = Ai[p];
-//   y[i] += Ax[p] * x[j];
-// }
-
-// void SCS(accum_by_a)(const ScsMatrix *A, const scs_float *x,  scs_float *y) {
-//   /*y += A*x
-//     A in column compressed format
-//     */
-//   scs_int n = A->n;
-//   scs_int *Ap = A->p;
-//   scs_int rows = Ap[n];
-//   scs_int *Ai = A->i;
-//   scs_float *Ax = A->x;
-//   scs_float *y_dev;
-//   cudaMalloc(&y_dev,rows* n *sizeof(scs_float));
-//   _cuda_accum_by_a<<<1, dim3(rows, n)>>>(y_dev, Ap, Ai, Ax, x);
-//   cudaMemcpy(y_dev,y,rows* n*sizeof(scs_float),cudaMemcpyHostToDevice);
-// }
-
-// __global__ void _cuda_accum_by_atrans(scs_float *y, scs_int *Ap, scs_int *Ai, scs_float *Ax, const scs_float *x) {
-//   scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
-//   scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Ap[j];
-//   scs_int i = Ai[p];
-//   y[j] += Ax[p] * x[i];
-// }
-
-// void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x, 
-//                         scs_float *y) {
-// /* y += A'*x
-//    A in column compressed format
-//    parallelizes over columns (rows of A')
-//  */
-//   // scs_int n = A->n;
-//   scs_int n = A->n;
-//   scs_int *Ap = A->p;
-//   scs_int rows = Ap[n];
-//   scs_int *Ai = A->i;
-//   scs_float *Ax = A->x;
-//   scs_float *y_dev;
-//   cudaMalloc(&y_dev,rows*n *sizeof(scs_float));
-//   _cuda_accum_by_atrans<<<1, dim3(rows,n)>>>(y_dev, Ap, Ai, Ax, x);
-//   cudaMemcpy(y_dev,y,rows*n*sizeof(scs_float),cudaMemcpyHostToDevice);
-// }
-
-// __global__ void _cuda_accum_by_p(scs_float *y, scs_int *Pp, scs_int *Pi, scs_float *Px, const scs_float *x) {
-//   scs_int j= blockIdx.x*blockDim.x + threadIdx.x;
-//   scs_int p = blockIdx.y*blockDim.x + threadIdx.x + Pp[j];
-//   scs_int i = Pi[p];
-//   if (i != j) y[i] += Px[p] * x[j];
-// }
-
-// /* Since P is upper triangular need to be clever here */
-// void SCS(accum_by_p)(const ScsMatrix *P, const scs_float *x, scs_float *y) {
-//   /* returns y += P x */
-//   // scs_int p, j, i;
-//   scs_int n = P->n;
-  
-//   scs_int *Pp = P->p;
-//   scs_int rows = Pp[n];
-//   scs_int *Pi = P->i;
-//   scs_float *Px = P->x;
-//   /* y += P_upper x but skip diagonal entries*/
-//   scs_float *y_dev;
-//   cudaMalloc(&y_dev,rows * n *sizeof(scs_float));
-//   _cuda_accum_by_p<<<1, dim3(rows, n)>>>(y_dev, Pp, Pi, Px, x);
-//   cudaMemcpy(y_dev,y,rows*n*sizeof(scs_float),cudaMemcpyHostToDevice);
-//   /* y += P_lower x */
-//   SCS(accum_by_atrans)(P, x, y);
-// }
-
-// __global__ void _cuda_compute_rsk(scs_float *rski, ScsWork *w) {
-// scs_int i= blockIdx.x*blockDim.x + threadIdx.x;
-// rski[i] *= (w->v[i] + w->u[i] - 2 * w->u_t[i]) * w->diag_r[i];
-// }
-
-// void SCS(compute_rsk)(ScsWork *w) {
-//   scs_float *rski_dev;
-//   scs_int l = w->d->m + w->d->n + 1;
-//   cudaMalloc(&rski_dev,l*sizeof(scs_float));
-//   _cuda_compute_rsk<<<(l+255)/256, 256>>>(rski_dev, w);
-//   cudaMemcpy(rski_dev,w->rsk,l*sizeof(scs_float),cudaMemcpyHostToDevice);
-// }
-
-// __global__ void _cuda_update_dual_vars(scs_float *vi_dev, ScsWork *w) {
-// scs_int i= blockIdx.x*blockDim.x + threadIdx.x;
-// w->v[i] += w->stgs->alpha * (w->u[i] - w->u_t[i]);
-// }
-
-// void SCS(update_dual_vars)(ScsWork *w) {
-// scs_float *vi_dev;
-// scs_int l = w->d->n + w->d->m + 1;
-// cudaMalloc(&vi_dev,l*sizeof(scs_float));
-// _cuda_update_dual_vars<<<(l+255)/256, 256>>>(vi_dev, w);
-// cudaMemcpy(vi_dev,w->v,l*sizeof(scs_float),cudaMemcpyHostToDevice);
-// }
