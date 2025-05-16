@@ -392,6 +392,7 @@ extern "C" {
     float *d_y;
     scs_float *d_Ax, *d_x;
     scs_int rows = (n + 255)/256;
+
     // Allocate and copy matrix components
     cudaMalloc(&d_Ap, (n+1) * sizeof(int));
     cudaMalloc(&d_Ai, n * sizeof(int));
@@ -442,6 +443,8 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
   int *d_Ap, *d_Ai;
   float *d_y;
   scs_float *d_Ax, *d_x;
+
+  // Allocate and copy matrix components
   cudaMalloc(&d_Ap, (n+1) * sizeof(int));
   cudaMalloc(&d_Ai, n * sizeof(int));
   cudaMalloc(&d_Ax, n * sizeof(scs_float));
@@ -488,10 +491,13 @@ void SCS(accum_by_atrans)(const ScsMatrix *A, const scs_float *x,
     int *d_Pp, *d_Pi;
     float *d_y;
     scs_float *d_Px, *d_x;
+      
+    // Allocate and copy matrix components
     cudaMalloc(&d_Pp, (n+1) * sizeof(int));
     cudaMalloc(&d_Pi, n * sizeof(int));
     cudaMalloc(&d_Px, n * sizeof(scs_float));
     
+    // Allocate and copy input vector
     cudaMemcpy(d_Pp, P->p, (n+1) * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_Pi, P->i, n * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_Px, P->x, n * sizeof(scs_float), cudaMemcpyHostToDevice);
